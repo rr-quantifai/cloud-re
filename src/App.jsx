@@ -188,7 +188,7 @@ const Badge = ({ text, className }) => (
 );
 
 const TabSwitch = ({ items, active, onChange }) => (
-  <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+  <div className="inline-flex gap-1 bg-gray-100 rounded-lg p-1">
     {items.map(([k, l, disabled]) => (
       <button
         key={k}
@@ -335,7 +335,7 @@ const UploadPanel = ({ uploadState, handleUpload, fileRef }) => {
         </div>
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Data Upload</h2>
-          <p className="text-xs text-gray-400">Upload monthly sales CSV reports — baseline is the earliest month across all uploads</p>
+          <p className="text-xs text-gray-400">Baseline is the earliest month across all uploads</p>
         </div>
       </div>
       <label className={"flex flex-col items-center justify-center w-full flex-1 border-2 rounded-xl cursor-pointer transition " + bc + " " + bg + " " + bs}>
@@ -347,8 +347,7 @@ const UploadPanel = ({ uploadState, handleUpload, fileRef }) => {
               ? <div className="flex items-center gap-2"><div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg></div><span className="text-xs font-semibold text-emerald-700">{uploadState.message}</span></div>
               : <>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                  <span className="text-xs text-gray-500 mt-2">Click to upload a CSV</span>
-                  <span className="text-xs text-gray-400 mt-1">Required columns: custid · EndCustomer · InvoiceDate · amount · SubscriptionName · partnername · storeid</span>
+                  <span className="text-xs text-gray-500 mt-2">Upload CSV</span>
                 </>
         }
         {st !== "uploading" && <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { handleUpload(e.target.files); if (fileRef.current) fileRef.current.value = ""; }}/>}
@@ -380,12 +379,12 @@ const DataCoverage = ({ sortedMonths, flashMonths }) => {
         </div>
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Data Coverage</h2>
-          <p className="text-xs text-gray-400">{sortedMonths.length} month{sortedMonths.length !== 1 ? "s" : ""} loaded · baseline = earliest month across all uploads</p>
+          <p className="text-xs text-gray-400">{sortedMonths.length} month{sortedMonths.length !== 1 ? "s" : ""} covered</p>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto pt-3 pb-2">
         {years.length === 0
-          ? <div className="flex items-center justify-center h-full"><p className="text-xs text-gray-400">No data uploaded yet</p></div>
+          ? <div className="flex items-center justify-center h-full"><p className="text-xs text-gray-400">No CSV uploaded</p></div>
           : <div className="flex flex-col gap-3">
               {years.map(y => (
                 <div key={y} className="flex items-start flex-wrap gap-y-1.5 leading-none">
@@ -1451,18 +1450,15 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="flex items-center text-xs whitespace-nowrap gap-1.5">
-              <span className="text-gray-500">Monthly reports:</span>
-              <span className="font-semibold text-gray-900">{sortedMonths.length}</span>
-              {sortedMonths.length > 0 && (
-                <>
-                  <span className="text-gray-300 mx-1">·</span>
+            {sortedMonths.length > 0 && (
+              <>
+                <span className="flex items-center text-xs whitespace-nowrap gap-1.5">
                   <span className="text-gray-500">Baseline:</span>
                   <span className="font-semibold text-blue-600">{fmtMonthKey(sortedMonths[0])}</span>
-                </>
-              )}
-            </span>
-            <div className="w-px h-5 bg-gray-200"/>
+                </span>
+                <div className="w-px h-5 bg-gray-200"/>
+              </>
+            )}
             <button onClick={clearAll} disabled={!hasData}
               className={"px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap h-[32px] " + (!hasData ? "text-gray-300 bg-gray-100 cursor-not-allowed" : "text-red-600 bg-red-50 hover:bg-red-100")}>
               Clear All Data
@@ -1476,10 +1472,10 @@ function App() {
         <div className="mb-6">
           <TabSwitch
             items={[
+              [TAB.UPLOAD,    "Data Upload", false   ],
               [TAB.RAW,       "Raw Data",    !hasData],
               [TAB.TRACKER,   "Tracker",     !hasData],
               [TAB.LIFECYCLE, "Lifecycle",   !hasData],
-              [TAB.UPLOAD,    "Data Upload", false   ],
             ]}
             active={tab}
             onChange={setTab}
