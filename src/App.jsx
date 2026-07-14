@@ -50,9 +50,11 @@ const parseCsv = (file) => new Promise((res, rej) => {
 const parseDateFlexible = (s) => {
   if (!s) return null;
   const t = s.trim();
-  const dmy = t.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  const dmy = t.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
   if (dmy) {
-    const d = new Date(`${dmy[3]}-${dmy[2].padStart(2,"0")}-${dmy[1].padStart(2,"0")}T00:00:00Z`);
+    const rawYear = parseInt(dmy[3], 10);
+    const year    = dmy[3].length === 2 ? 2000 + rawYear : rawYear;
+    const d = new Date(`${year}-${dmy[2].padStart(2,"0")}-${dmy[1].padStart(2,"0")}T00:00:00Z`);
     if (!isNaN(d)) return d;
   }
   const d = new Date(t);
@@ -74,11 +76,8 @@ const fmtMonthKey = (ym) => {
   return MONTH_ABBREVS[m - 1] + "-" + String(y).slice(2);
 };
 
-const fmtDate = (s) => {
-  const d = parseDateFlexible(s);
-  if (!d) return s || "";
-  return `${d.getDate()}-${MONTH_ABBREVS[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
-};
+const getFY      = (ym) => { const [y, m] = ym.split("-").map(Number); return m >= 4 ? y + 1 : y; };
+const getFYLabel = (fy) => `FY${String(fy).slice(2)}`;
 
 /* ═══════════════════════════════════════════════════════════════════
    CONSTANTS
@@ -91,7 +90,6 @@ const extractCountry     = (v) => { const s = (v||"").trim(); const i = s.indexO
 const TAB = Object.freeze({ TRACKER: "tracker", UPLOAD: "upload" });
 const PAGE_SIZE = 25;
 const MIN_DESKTOP = 1024;
-const H_PANEL = "252px";
 
 const PRODUCT_PALETTE = [
   "bg-purple-100 text-purple-700",
@@ -105,12 +103,6 @@ const PRODUCT_PALETTE = [
   "bg-rose-100 text-rose-700",
   "bg-teal-100 text-teal-700",
 ];
-
-const TYPE_STYLES = {
-  upsell:    { badge: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500", label: "Upsell",     col: "text-emerald-700" },
-  crosssell: { badge: "bg-blue-100 text-blue-700",       dot: "bg-blue-500",    label: "Cross-sell", col: "text-blue-700"    },
-  new:       { badge: "bg-violet-100 text-violet-700",   dot: "bg-violet-500",  label: "New",        col: "text-violet-700"  },
-};
 
 /* deterministic color per product name */
 const hashProductColor = (product) => {
@@ -187,6 +179,13 @@ const Badge = ({ text, className }) => (
   <span className={"inline-block px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap max-w-[180px] truncate " + (className||"")} title={text}>{text}</span>
 );
 
+const Chk = ({ checked, partial, onClick }) => (
+  <div onClick={onClick} className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition " + (checked ? "border-blue-600" : partial ? "border-blue-400" : "border-gray-300 hover:border-gray-400")}>
+    {checked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="4"><path d="M20 6L9 17l-5-5"/></svg>}
+    {partial && !checked && <div className="w-2 h-0.5 bg-blue-400 rounded-sm"/>}
+  </div>
+);
+
 const TabSwitch = ({ items, active, onChange }) => (
   <div className="inline-flex gap-1 bg-gray-100 rounded-lg p-1">
     {items.map(([k, l, disabled]) => (
@@ -216,30 +215,6 @@ const useOutsideClose = (ref, open, setOpen) => {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
-};
-
-const SelectDropdown = ({ value, onChange, options, placeholder, className = "" }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useOutsideClose(ref, open, setOpen);
-  const selected = options.find(o => o.value === value);
-  return (
-    <div ref={ref} className={"relative " + className}>
-      <div onClick={() => setOpen(!open)} className={"w-full px-2.5 py-1.5 text-sm border rounded-lg bg-white h-[36px] flex items-center justify-between cursor-pointer " + (value ? "border-blue-400 hover:border-blue-500" : "border-gray-200 hover:border-blue-300")}>
-        <span className={(value ? "text-blue-600" : "text-gray-400") + " truncate"}>{selected?.label || placeholder || "Select…"}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={"flex-shrink-0 ml-1 transition-transform " + (open ? "rotate-180" : "")}><path d="M6 9l6 6 6-6"/></svg>
-      </div>
-      {open && (
-        <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto mt-1">
-          {options.map(o => (
-            <div key={o.value} onClick={() => { onChange(o.value); setOpen(false); }} className={"px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 " + (o.value === value ? "font-semibold text-blue-600 bg-blue-50" : "text-gray-700")}>
-              {o.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 };
 
 const MultiSel = ({ values, onChange, options, placeholder, searchable = false }) => {
@@ -347,66 +322,9 @@ const UploadBar = ({ uploadState, handleUpload, fileRef }) => {
 };
 
 /* ═══════════════════════════════════════════════════════════════════
-   DATA COVERAGE
-   ═══════════════════════════════════════════════════════════════════ */
-const DataCoverage = ({ sortedMonths, flashMonths }) => {
-  const byYear = useMemo(() => {
-    const m = {};
-    for (const ym of sortedMonths) {
-      const [y, mo] = ym.split("-").map(Number);
-      if (!m[y]) m[y] = [];
-      if (!m[y].includes(mo)) m[y].push(mo);
-    }
-    return m;
-  }, [sortedMonths]);
-  const years = Object.keys(byYear).sort();
-  const baselineMonth = sortedMonths[0] || null;
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col" style={{height: H_PANEL}}>
-      <div className="flex items-center gap-2 pb-3 border-b border-gray-100 flex-shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">Data Coverage</h2>
-          <p className="text-xs text-gray-400">{sortedMonths.length} month{sortedMonths.length !== 1 ? "s" : ""} covered</p>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto pt-3 pb-2">
-        {years.length === 0
-          ? <div className="flex items-center justify-center h-full"><p className="text-xs text-gray-400">No CSV uploaded</p></div>
-          : <div className="flex flex-col gap-3">
-              {years.map(y => (
-                <div key={y} className="flex items-start flex-wrap gap-y-1.5 leading-none">
-                  <span className="text-xs font-semibold text-gray-700 mr-3 pt-0.5">{y}</span>
-                  <div className="flex flex-wrap gap-x-1 gap-y-1.5">
-                    {byYear[y].map(mo => {
-                      const ym = `${y}-${String(mo).padStart(2,"0")}`;
-                      const isBaseline = ym === baselineMonth;
-                      const isFlash = flashMonths.includes(ym);
-                      return (
-                        <span key={mo} className="flex items-center gap-1">
-                          <span className={"text-xs transition-colors duration-500 " + (isFlash ? "text-emerald-600 font-semibold" : "text-gray-600")}>
-                            {MONTH_ABBREVS[mo - 1]}
-                          </span>
-                          {isBaseline && <span className="text-[10px] text-blue-400 font-semibold uppercase tracking-wide">base</span>}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-        }
-      </div>
-    </div>
-  );
-};
-
-/* ═══════════════════════════════════════════════════════════════════
    KPI CARDS
    ═══════════════════════════════════════════════════════════════════ */
-const KPICards = ({ totals, priorTotals, monthLabel }) => {
+const KPICards = ({ totals, priorTotals }) => {
   const fmtVal  = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
   const fmtPct  = (v) => (v || 0).toFixed(1) + "%";
   const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
@@ -463,12 +381,87 @@ const KPICards = ({ totals, priorTotals, monthLabel }) => {
   );
 };
 
+const FYMonthFilter = ({ values, onChange, allMonths }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useOutsideClose(ref, open, setOpen);
+
+  const fyTree = useMemo(() => {
+    const groups = {};
+    for (const ym of allMonths) {
+      const fy = getFY(ym);
+      if (!groups[fy]) groups[fy] = [];
+      groups[fy].push(ym);
+    }
+    for (const fy in groups) groups[fy].sort((a, b) => b.localeCompare(a));
+    return Object.entries(groups).sort(([a],[b]) => b - a).map(([fy, months]) => ({ fy: Number(fy), months }));
+  }, [allMonths]);
+
+  const selSet = useMemo(() => new Set(values), [values]);
+  const allOf  = (ms) => ms.length > 0 && ms.every(m => selSet.has(m));
+  const someOf = (ms) => ms.some(m => selSet.has(m));
+  const toggleFY    = (months) => { const next = new Set(selSet); if (allOf(months)) months.forEach(m => next.delete(m)); else months.forEach(m => next.add(m)); onChange([...next]); };
+  const toggleMonth = (ym)     => { const next = new Set(selSet); next.has(ym) ? next.delete(ym) : next.add(ym); onChange([...next]); };
+
+  const displayLabel = values.length === 0 ? "Latest month"
+    : values.length === 1 ? fmtMonthKey(values[0])
+    : `${values.length} months`;
+
+  return (
+    <div ref={ref} className="relative flex-1 min-w-0">
+      <div onClick={() => setOpen(!open)} className={"w-full px-2.5 py-1.5 text-sm border rounded-lg bg-white h-[36px] flex items-center gap-1 cursor-pointer " + (values.length > 0 ? "border-blue-400 hover:border-blue-500" : "border-gray-200 hover:border-blue-300")}>
+        <span className={"flex-1 min-w-0 truncate " + (values.length > 0 ? "text-blue-600" : "text-gray-400")}>{displayLabel}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={values.length > 0 ? "#60a5fa" : "#9ca3af"} strokeWidth="2" className={"flex-shrink-0 transition-transform " + (open ? "rotate-180" : "")}><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto" style={{ minWidth: "100%" }}>
+          {fyTree.map(({ fy, months }) => {
+            const fyChk = allOf(months), fySome = someOf(months), fyExp = fySome || fyChk;
+            return (
+              <div key={fy} className="border-b border-gray-100 last:border-b-0">
+                <div className="flex items-center gap-2 hover:bg-gray-50" style={{ padding: "10px 12px" }}>
+                  <Chk checked={fyChk} partial={fySome} onClick={() => toggleFY(months)} />
+                  <span className="text-xs font-bold text-gray-800 cursor-pointer select-none" onClick={() => toggleFY(months)}>{getFYLabel(fy)}</span>
+                </div>
+                {fyExp && months.map(ym => {
+                  const chk = selSet.has(ym);
+                  return (
+                    <div key={ym} className="flex items-center gap-2 hover:bg-gray-50 border-t border-dashed border-gray-200" style={{ padding: "10px 12px 10px 28px" }} onClick={() => toggleMonth(ym)}>
+                      <Chk checked={chk} partial={false} onClick={(e) => { e.stopPropagation(); toggleMonth(ym); }} />
+                      <span className="text-xs font-semibold text-gray-700 select-none">{fmtMonthKey(ym)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const fmtVal    = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+const fmtPct    = (v) => (v || 0).toFixed(1) + "%";
+const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
+const GRID      = "minmax(150px, 2fr) 0.7fr 0.8fr 1fr 1fr 0.8fr 1fr 1.1fr";
+const GAP       = { gap: "8px" };
+
+const SortTh = ({ col, label, right = false, sortCol, onSort }) => (
+  <span className={"cursor-pointer select-none hover:text-gray-700 transition text-xs uppercase tracking-wider font-medium whitespace-nowrap " + (right ? "block text-right" : "")}
+    onClick={() => onSort(col)} style={{ color: sortCol === col ? "#1d4ed8" : "#9ca3af" }}>{label}</span>
+);
+
+const IDBadge  = ({ id })    => <span className="inline-block px-1.5 py-px text-[10px] font-medium rounded border border-gray-200 bg-gray-50 text-gray-400 flex-shrink-0">{id}</span>;
+const CntBadge = ({ label }) => <span className="inline-block px-1.5 py-px text-[10px] rounded border border-slate-200 bg-slate-100 text-slate-500 flex-shrink-0">{label}</span>;
+const Dash     = ()          => <span className="text-gray-200 text-xs">—</span>;
+
 /* ═══════════════════════════════════════════════════════════════════
    TRACKER VIEW
    ═══════════════════════════════════════════════════════════════════ */
 const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const latestMonth = sortedMonths.length ? sortedMonths[sortedMonths.length - 1] : null;
-  const [selMonth, setSelMonth]         = useState(null);
+  const [selMonths, setSelMonths]       = useState([]);
   const [selPartner, setSelPartner]     = useState([]);
   const [selCustomer, setSelCustomer]   = useState([]);
   const [selProducts, setSelProducts]   = useState([]);
@@ -479,25 +472,23 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [sortDir, setSortDir]           = useState("desc");
   const [partnerPage, setPartnerPage]   = useState(0);
 
-  useEffect(() => {
-    if (!latestMonth) return;
-    if (!selMonth || !sortedMonths.includes(selMonth)) setSelMonth(latestMonth);
-  }, [latestMonth, sortedMonths]);
+  const effectiveMonths = useMemo(
+    () => selMonths.length ? selMonths : (latestMonth ? [latestMonth] : []),
+    [selMonths, latestMonth]
+  );
 
-  const effectiveMonth = selMonth || latestMonth;
-
-  const priorYearMonth = useMemo(() => {
-    if (!effectiveMonth) return null;
-    const [y, m] = effectiveMonth.split("-").map(Number);
-    const pym = `${y - 1}-${String(m).padStart(2, "0")}`;
-    return sortedMonths.includes(pym) ? pym : null;
-  }, [effectiveMonth, sortedMonths]);
+  const priorYearMonths = useMemo(() =>
+    effectiveMonths
+      .map(ym => { const [y, m] = ym.split("-").map(Number); return `${y - 1}-${String(m).padStart(2, "0")}`; })
+      .filter(ym => sortedMonths.includes(ym)),
+    [effectiveMonths, sortedMonths]
+  );
 
   const parseValue = useCallback((v) => parseFloat((v || "").toString().replace(/[^0-9.\-]/g, "")) || 0, []);
 
   const monthRows = useMemo(() =>
-    allRows.filter(r => r._reportingMonth === effectiveMonth),
-    [allRows, effectiveMonth]
+    allRows.filter(r => effectiveMonths.includes(r._reportingMonth)),
+    [allRows, effectiveMonths]
   );
 
   /* ── Cascading valid sets ── */
@@ -568,14 +559,12 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     return all.map(c => ({ value: c, label: c, disabled: !validForCountry.has(c) }));
   }, [monthRows, validForCountry]);
 
-  const monthOptions = useMemo(() => sortedMonths.map(ym => ({ value: ym, label: fmtMonthKey(ym) })), [sortedMonths]);
-
   /* ── Aggregate ── */
-  const aggregate = useCallback((month, partnerFilter, customerFilter, prodFilter, countryFilter) => {
+  const aggregate = useCallback((months, partnerFilter, customerFilter, prodFilter, countryFilter) => {
     const empty = { byPartner: {}, totals: { upsell: 0, crosssell: 0, new: 0, total: 0 } };
-    if (!month) return empty;
+    if (!months || !months.length) return empty;
     const rows = allRows.filter(r => {
-      if (r._reportingMonth !== month) return false;
+      if (!months.includes(r._reportingMonth)) return false;
       if (partnerFilter.length  && !partnerFilter.includes((r["Partner ID"]   || "").trim())) return false;
       if (customerFilter.length && !customerFilter.includes((r["Customer ID"] || "").trim())) return false;
       if (prodFilter.length     && !prodFilter.includes((r["Product"]         || "").trim())) return false;
@@ -607,12 +596,12 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   }, [allRows, typeMap, parseValue]);
 
   const { byPartner: currentPartners, totals: currentTotals } = useMemo(
-    () => aggregate(effectiveMonth, selPartner, selCustomer, selProducts, selCountry),
-    [aggregate, effectiveMonth, selPartner, selCustomer, selProducts, selCountry]
+    () => aggregate(effectiveMonths, selPartner, selCustomer, selProducts, selCountry),
+    [aggregate, effectiveMonths, selPartner, selCustomer, selProducts, selCountry]
   );
-  const { byPartner: priorPartners, totals: priorTotals } = useMemo(
-    () => priorYearMonth ? aggregate(priorYearMonth, selPartner, selCustomer, selProducts, selCountry) : { byPartner: {}, totals: null },
-    [aggregate, priorYearMonth, selPartner, selCustomer, selProducts, selCountry]
+  const { totals: priorTotals } = useMemo(
+    () => priorYearMonths.length ? aggregate(priorYearMonths, selPartner, selCustomer, selProducts, selCountry) : { totals: null },
+    [aggregate, priorYearMonths, selPartner, selCustomer, selProducts, selCountry]
   );
 
   /* ── All-time lifecycle data ── */
@@ -630,20 +619,11 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     return m;
   }, [allRows]);
 
-  const fmtVal    = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
-  const fmtPct    = (v) => (v || 0).toFixed(1) + "%";
-  const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
-
   const toggleSort = (col) => {
     if (sortCol === col) { if (sortDir === "desc") setSortDir("asc"); else { setSortCol(null); setSortDir("desc"); } }
     else { setSortCol(col); setSortDir("desc"); }
     setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0);
   };
-
-  const SortTh = ({ col, label, right = false }) => (
-    <span className={"cursor-pointer select-none hover:text-gray-700 transition text-xs uppercase tracking-wider font-medium " + (right ? "block text-right" : "")}
-      onClick={() => toggleSort(col)} style={{ color: sortCol === col ? "#1d4ed8" : "#9ca3af" }}>{label}</span>
-  );
 
   const toggleExpand     = (pID) => setExpanded(prev => { const n = new Set(prev); n.has(pID) ? n.delete(pID) : n.add(pID); return n; });
   const toggleExpandCust = (pID, cID) => { const k = pID+"|||"+cID; setExpandedCust(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; }); };
@@ -665,38 +645,29 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       : [...ids].sort((a, b) => currentPartners[a].name.localeCompare(currentPartners[b].name));
   }, [currentPartners, sortCol, sortDir]);
 
-  useEffect(() => { setPartnerPage(0); setExpanded(new Set()); setExpandedCust(new Set()); }, [selPartner, selCustomer, selProducts, selCountry, effectiveMonth]);
+  useEffect(() => { setPartnerPage(0); setExpanded(new Set()); setExpandedCust(new Set()); }, [selPartner, selCustomer, selProducts, selCountry, selMonths]);
 
   const totalPartnerPages = Math.max(1, Math.ceil(partnerNames.length / PAGE_SIZE));
   const safePartnerPage   = Math.min(partnerPage, totalPartnerPages - 1);
   const pagedPartnerNames = partnerNames.slice(safePartnerPage * PAGE_SIZE, (safePartnerPage + 1) * PAGE_SIZE);
   const uniqueCustomerCount = useMemo(() => Object.values(currentPartners).reduce((s, pd) => s + Object.keys(pd.customers).length, 0), [currentPartners]);
 
-  const monthLabel = effectiveMonth ? fmtMonthKey(effectiveMonth) : "—";
-  const GRID = "1fr 80px 80px 80px 80px 80px";
-  const GAP  = { gap: "8px" };
-
-  const hasFilters = selPartner.length > 0 || selCustomer.length > 0 || selProducts.length > 0 || selCountry.length > 0 ||
-    (selMonth && selMonth !== latestMonth) || sortCol !== null;
+  const hasFilters = selMonths.length > 0 || selPartner.length > 0 || selCustomer.length > 0 || selProducts.length > 0 || selCountry.length > 0 || sortCol !== null;
 
   const resetAll = () => {
-    setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
-    setSelMonth(latestMonth); setSortCol(null); setSortDir("desc");
+    setSelMonths([]); setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
+    setSortCol(null); setSortDir("desc");
     setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0);
   };
 
-  const IDBadge   = ({ id })  => <span className="inline-block px-1.5 py-px text-[10px] font-medium rounded border border-gray-200 bg-gray-50 text-gray-400 flex-shrink-0">{id}</span>;
-  const CntBadge  = ({ label }) => <span className="inline-block px-1.5 py-px text-[10px] rounded border border-gray-200 bg-gray-50 text-gray-400 flex-shrink-0">{label}</span>;
-  const Dash      = () => <span className="text-gray-200 text-xs">—</span>;
-
   return (
     <div>
-      <KPICards totals={currentTotals} priorTotals={priorTotals} monthLabel={monthLabel}/>
+      <KPICards totals={currentTotals} priorTotals={priorTotals}/>
 
       {/* Filter bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2">
-          <SelectDropdown value={effectiveMonth} onChange={v => { setSelMonth(v); setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0); }} options={monthOptions} placeholder="Month" className="flex-1 min-w-0"/>
+          <FYMonthFilter values={selMonths} onChange={v => { setSelMonths(v); setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0); }} allMonths={sortedMonths} />
           <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v);  setSelCustomer([]); setPartnerPage(0); }} options={partnerOptions}  placeholder="Partner"  searchable/></div>
           <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }}                   options={customerOptions} placeholder="Customer" searchable/></div>
           <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts} options={productOptions} placeholder="Product"/></div>
@@ -726,11 +697,13 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                 <div className="flex items-center">
                   {[
                     ["First", () => setPartnerPage(0),                                            safePartnerPage === 0],
+                    null,
                     ["Back",  () => setPartnerPage(p => Math.max(0, p - 1)),                      safePartnerPage === 0],
                     null,
                     [`${safePartnerPage + 1} / ${totalPartnerPages}`, null, false],
                     null,
                     ["Next",  () => setPartnerPage(p => Math.min(totalPartnerPages - 1, p + 1)), safePartnerPage >= totalPartnerPages - 1],
+                    null,
                     ["Last",  () => setPartnerPage(totalPartnerPages - 1),                        safePartnerPage >= totalPartnerPages - 1],
                   ].map((item, i) =>
                     item === null
@@ -749,17 +722,18 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
             {/* Column headers */}
             <div className="grid items-center px-4 py-2.5 bg-gray-50 border-b border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
               <span></span>
-              <SortTh col="upsell"    label="Upsell"/>
-              <SortTh col="crosssell" label="Cross-sell"/>
-              <SortTh col="new"       label="New"/>
-              <SortTh col="total"     label="Total"/>
-              <SortTh col="recap"     label="Recapture" right/>
+              <span/>
+              <span/>
+              <SortTh col="upsell"    label="Upsell"     sortCol={sortCol} onSort={toggleSort}/>
+              <SortTh col="crosssell" label="Cross-sell" sortCol={sortCol} onSort={toggleSort}/>
+              <SortTh col="new"       label="New"        sortCol={sortCol} onSort={toggleSort}/>
+              <SortTh col="total"     label="Total"      sortCol={sortCol} onSort={toggleSort}/>
+              <SortTh col="recap"     label="Recapture"  sortCol={sortCol} onSort={toggleSort} right/>
             </div>
 
             {/* Partner rows */}
             {pagedPartnerNames.map((pID, pi) => {
               const pd      = currentPartners[pID];
-              const pp      = priorPartners[pID] || null;
               const isExp   = expanded.has(pID);
               const rate    = recapRate(pd);
               const custIDs = Object.keys(pd.customers).sort();
@@ -774,9 +748,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"/></svg>
                       </div>
                       <span className="text-xs font-medium text-gray-800 truncate" title={pd.name}>{pd.name}</span>
-                      <IDBadge id={pID}/>
-                      <CntBadge label={`(${custIDs.length} customer${custIDs.length !== 1 ? "s" : ""})`}/>
                     </div>
+                    <div className="flex items-center"><CntBadge label={`${custIDs.length} customer${custIDs.length !== 1 ? "s" : ""}`}/></div>
+                    <div className="flex items-center"><IDBadge id={pID}/></div>
                     <span className="text-xs font-medium text-gray-900">{fmtVal(pd.upsell)}</span>
                     <span className="text-xs font-medium text-gray-900">{fmtVal(pd.crosssell)}</span>
                     <span className="text-xs font-medium text-gray-900">{fmtVal(pd.new)}</span>
@@ -787,7 +761,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                   {/* Customer rows */}
                   {isExp && custIDs.map((cID) => {
                     const cd      = pd.customers[cID];
-                    const ppCust  = pp?.customers?.[cID] || null;
                     const custKey = pID + "|||" + cID;
                     const isExpC  = expandedCust.has(custKey);
                     const prodKeys= Object.keys(cd.productBreakdown).sort();
@@ -806,9 +779,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
                             </div>
                             <span className="text-xs font-medium text-gray-700 truncate" title={cd.name}>{cd.name}</span>
-                            <IDBadge id={cID}/>
-                            <CntBadge label={`(${prodKeys.length} product${prodKeys.length !== 1 ? "s" : ""})`}/>
                           </div>
+                          <div className="flex items-center"><CntBadge label={`${prodKeys.length} product${prodKeys.length !== 1 ? "s" : ""}`}/></div>
+                          <div className="flex items-center"><IDBadge id={cID}/></div>
                           <span className="text-xs text-gray-700">{cd.upsell    > 0 ? fmtVal(cd.upsell)    : <Dash/>}</span>
                           <span className="text-xs text-gray-700">{cd.crosssell > 0 ? fmtVal(cd.crosssell) : <Dash/>}</span>
                           <span className="text-xs text-gray-700">{cd.new       > 0 ? fmtVal(cd.new)       : <Dash/>}</span>
@@ -821,12 +794,14 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                           const prd = cd.productBreakdown[product];
                           return (
                             <div key={product} className="grid items-center px-4 py-2 bg-gray-50/70 border-t border-dotted border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
-                              <div className="flex items-center gap-1.5 min-w-0" style={{marginLeft:"32px"}}>
+                              <div className="flex items-center gap-1.5 min-w-0" style={{marginLeft:"48px"}}>
                                 <div className="w-[16px] h-[16px] rounded bg-violet-50 flex items-center justify-center flex-shrink-0">
                                   <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
                                 </div>
                                 <Badge text={product} className={hashProductColor(product)}/>
                               </div>
+                              <span/>
+                              <span/>
                               {["upsell","crosssell","new"].map(t => (
                                 <span key={t} className="text-xs text-gray-600">{prd.type === t ? fmtVal(prd[t]) : <Dash/>}</span>
                               ))}
@@ -839,17 +814,17 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                         {/* Lifecycle rows — indent 1, always shown when customer is expanded */}
                         {isExpC && (
                           <>
-                            <div className="px-4 py-2.5 border-t border-dotted border-gray-200 bg-gray-50/40">
+                            <div className="px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20">
                               <div className="flex items-start gap-3" style={{marginLeft:"16px"}}>
-                                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap pt-0.5" style={{minWidth:"130px"}}>All products purchased</span>
+                                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap pt-0.5 flex-shrink-0" style={{minWidth:"160px"}}>All products purchased</span>
                                 <div className="flex flex-wrap gap-1">
                                   {[...lcData.products].sort().map(p => <Badge key={p} text={p} className={hashProductColor(p)}/>)}
                                 </div>
                               </div>
                             </div>
-                            <div className="px-4 py-2.5 border-t border-dotted border-gray-200 bg-gray-50/40">
+                            <div className="px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20">
                               <div className="flex items-start gap-3" style={{marginLeft:"16px"}}>
-                                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap pt-0.5" style={{minWidth:"130px"}}>All recorded partners</span>
+                                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap pt-0.5 flex-shrink-0" style={{minWidth:"160px"}}>All recorded partners</span>
                                 <div className="flex flex-wrap gap-1">
                                   {[...lcData.partners].sort().map(p => <span key={p} className="inline-block px-2 py-0.5 text-[10px] rounded-full bg-white border border-gray-200 text-gray-500 whitespace-nowrap">{p}</span>)}
                                 </div>
@@ -863,32 +838,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                 </div>
               );
             })}
-
-            {totalPartnerPages > 1 && (
-              <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-xs text-gray-400">{partnerNames.length} partner{partnerNames.length !== 1 ? "s" : ""} · page {safePartnerPage + 1} of {totalPartnerPages}</span>
-                <div className="flex items-center">
-                  {[
-                    ["First", () => setPartnerPage(0),                                            safePartnerPage === 0],
-                    ["Back",  () => setPartnerPage(p => Math.max(0, p - 1)),                      safePartnerPage === 0],
-                    null,
-                    [`${safePartnerPage + 1} / ${totalPartnerPages}`, null, false],
-                    null,
-                    ["Next",  () => setPartnerPage(p => Math.min(totalPartnerPages - 1, p + 1)), safePartnerPage >= totalPartnerPages - 1],
-                    ["Last",  () => setPartnerPage(totalPartnerPages - 1),                        safePartnerPage >= totalPartnerPages - 1],
-                  ].map((item, i) =>
-                    item === null
-                      ? <span key={i} className="text-gray-300 mx-1">·</span>
-                      : item[1]
-                        ? <button key={i} onClick={() => { item[1](); setExpanded(new Set()); setExpandedCust(new Set()); }} disabled={item[2]}
-                            className={"px-2 py-1 text-xs font-medium transition " + (item[2] ? "text-gray-300 cursor-not-allowed" : "text-gray-500 hover:text-gray-700")}>
-                            {item[0]}
-                          </button>
-                        : <span key={i} className="px-2 py-1 text-xs font-medium text-gray-500">{item[0]}</span>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
       }
     </div>
@@ -975,7 +924,7 @@ function App() {
   /* ── Auto-clear upload status on next click ── */
   useEffect(() => {
     if (uploadState?.status === "success" || uploadState?.status === "error") {
-      const h = () => { setUploadState(null); setFlashMonths([]); };
+      const h = () => { setUploadState(null); };
       const t = setTimeout(() => window.addEventListener("click", h, { once: true }), 300);
       return () => { clearTimeout(t); window.removeEventListener("click", h); };
     }
@@ -994,12 +943,12 @@ function App() {
     if (!files || !files.length) return;
     const file = files[0];
     console.log("[CloudRe] Upload started:", file.name, `(${(file.size / 1024).toFixed(1)} KB)`);
-    setUploadState({ status: "uploading", progress: 10 });
+    setUploadState({ status: "uploading" });
     try {
       await new Promise(r => setTimeout(r, 40));
       const raw = await parseCsv(file);
       console.log("[CloudRe] Parsed rows:", raw.length, "· Detected headers:", Object.keys(raw[0] || {}).join(", "));
-      setUploadState({ status: "uploading", progress: 50 });
+      setUploadState({ status: "uploading" });
 
       const { valid, message } = validateCsv(raw);
       if (!valid) {
@@ -1009,10 +958,11 @@ function App() {
       }
 
       const isBlank = v => !v.trim() || ["na","n/a","#n/a","#na"].includes(v.trim().toLowerCase());
-      const clean   = raw.filter(r => REQUIRED_COLS.every(c => !isBlank(r[c] || "")));
+      const STRICT_COLS = REQUIRED_COLS.filter(c => c !== "amount");
+      const clean   = raw.filter(r => STRICT_COLS.every(c => !isBlank(r[c] || "")));
       const skipped = raw.length - clean.length;
       if (skipped > 0) {
-        const skippedRows = raw.filter(r => !REQUIRED_COLS.every(c => !isBlank(r[c] || "")));
+        const skippedRows = raw.filter(r => !STRICT_COLS.every(c => !isBlank(r[c] || "")));
         console.warn("[CloudRe] Skipped", skipped, "row(s) — blank or invalid required fields:");
         skippedRows.slice(0, 10).forEach((r, i) => {
           const blankFields = REQUIRED_COLS.filter(c => isBlank(r[c] || ""));
@@ -1028,7 +978,7 @@ function App() {
         "Partner Name":  extractPartnerName(r["partnername"]),
         "Partner ID":    extractPartnerID(r["partnername"]),
         "Product":       (r["SubscriptionName"] || "").trim(),
-        "Value":         (r["amount"]           || "").trim(),
+        "Value":         ((r["amount"]           || "").trim() || "0"),
         "Country":       extractCountry(r["storeid"]),
       }));
       console.log("[CloudRe] Normalized sample row:", normalized[0]);
@@ -1052,7 +1002,7 @@ function App() {
       const newMonths = [...new Set(newRows.map(r => r._reportingMonth))];
       console.log("[CloudRe] Months detected:", newMonths.map(fmtMonthKey).join(", "));
 
-      setUploadState({ status: "uploading", progress: 90 });
+      setUploadState({ status: "uploading" });
       await new Promise(r => setTimeout(r, 80));
 
       setAllRows(prev => [...prev.filter(r => !newMonths.includes(r._reportingMonth)), ...newRows]);
