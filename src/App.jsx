@@ -449,8 +449,8 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
 const fmtVal    = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 const fmtPct    = (v) => (v || 0).toFixed(1) + "%";
 const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
-const GRID      = "minmax(200px, 1.6fr) 90px 85px 1fr 1fr 1fr 1fr 100px";
-const GAP       = { gap: "16px" };
+const GRID      = "230px 90px 85px 80px 80px 80px 80px 90px";
+const GAP       = { gap: "16px", justifyContent: "space-between" };
 
 const SortTh = ({ col, label, right = false, sortCol, onSort }) => (
   <span className={"cursor-pointer select-none hover:text-gray-700 transition text-xs uppercase tracking-wider font-medium whitespace-nowrap " + (right ? "block text-right" : "")}
@@ -954,6 +954,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                                 return (
                                   <div key={product} className="grid items-center px-4 py-2 bg-gray-50/70 border-t border-dotted border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
                                     <div className="flex items-center gap-1.5 min-w-0" style={{marginLeft:"48px"}}>
+                                      <span className="w-[11px] flex-shrink-0"/>
                                       <div className="w-[16px] h-[16px] rounded bg-violet-50 flex items-center justify-center flex-shrink-0">
                                         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
                                       </div>
