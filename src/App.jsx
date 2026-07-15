@@ -449,7 +449,7 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
 const fmtVal    = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 const fmtPct    = (v) => (v || 0).toFixed(1) + "%";
 const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
-const GRID      = "230px 90px 85px 80px 80px 80px 80px 90px";
+const GRID      = "250px 85px 85px 85px 85px 85px 85px 85px";
 const GAP       = { gap: "16px", justifyContent: "space-between" };
 
 const SortTh = ({ col, label, right = false, sortCol, onSort }) => (
@@ -878,8 +878,8 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                       </div>
                       <span className="text-xs font-medium text-gray-800 truncate" title={cd.name}>{cd.name}</span>
                     </div>
-                    <div className="flex items-center"><CntBadge label={`${countryKeys.length} countr${countryKeys.length !== 1 ? "ies" : "y"}`}/></div>
-                    <div className="flex items-center"><IDBadge id={cID}/></div>
+                    <div className="flex items-center justify-end"><CntBadge label={`${countryKeys.length} countr${countryKeys.length !== 1 ? "ies" : "y"}`}/></div>
+                    <div className="flex items-center justify-end"><IDBadge id={cID}/></div>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.upsell)}</span>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.crosssell)}</span>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.new)}</span>
@@ -909,7 +909,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                             </div>
                             <span className="text-xs font-medium text-gray-700 truncate" title={country}>{country}</span>
                           </div>
-                          <div className="flex items-center"><CntBadge label={`${partnerKeys.length} partner${partnerKeys.length !== 1 ? "s" : ""}`}/></div>
+                          <div className="flex items-center justify-end"><CntBadge label={`${partnerKeys.length} partner${partnerKeys.length !== 1 ? "s" : ""}`}/></div>
                           <span/>
                           <span className="text-xs text-gray-700 text-right">{ctd.upsell    !== 0 ? fmtVal(ctd.upsell)    : <Dash/>}</span>
                           <span className="text-xs text-gray-700 text-right">{ctd.crosssell !== 0 ? fmtVal(ctd.crosssell) : <Dash/>}</span>
@@ -939,8 +939,8 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                                   </div>
                                   <span className="text-xs font-medium text-gray-700 truncate" title={pd.name}>{pd.name}</span>
                                 </div>
-                                <div className="flex items-center"><CntBadge label={`${prodKeys.length} product${prodKeys.length !== 1 ? "s" : ""}`}/></div>
-                                <div className="flex items-center"><IDBadge id={pID}/></div>
+                                <div className="flex items-center justify-end"><CntBadge label={`${prodKeys.length} product${prodKeys.length !== 1 ? "s" : ""}`}/></div>
+                                <div className="flex items-center justify-end"><IDBadge id={pID}/></div>
                                 <span className="text-xs text-gray-700 text-right">{pd.upsell    !== 0 ? fmtVal(pd.upsell)    : <Dash/>}</span>
                                 <span className="text-xs text-gray-700 text-right">{pd.crosssell !== 0 ? fmtVal(pd.crosssell) : <Dash/>}</span>
                                 <span className="text-xs text-gray-700 text-right">{pd.new       !== 0 ? fmtVal(pd.new)       : <Dash/>}</span>
