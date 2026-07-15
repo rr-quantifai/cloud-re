@@ -105,6 +105,7 @@ const PRODUCT_PALETTE = [
 
 /* deterministic color per product name */
 const hashProductColor = (product) => {
+  if (product === "Blank") return "bg-gray-100 text-gray-500";
   let h = 5381;
   for (let i = 0; i < product.length; i++) { h = ((h << 5) + h) + product.charCodeAt(i); h = h & h; }
   return PRODUCT_PALETTE[Math.abs(h) % PRODUCT_PALETTE.length];
@@ -175,6 +176,13 @@ const Dots = () => (
 
 const Badge = ({ text, className }) => (
   <span className={"inline-block px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap max-w-[180px] truncate " + (className||"")} title={text}>{text}</span>
+);
+
+const Chk = ({ checked, partial, onClick }) => (
+  <div onClick={onClick} className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition " + (checked ? "border-blue-600" : partial ? "border-blue-400" : "border-gray-300 hover:border-gray-400")}>
+    {checked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="4"><path d="M20 6L9 17l-5-5"/></svg>}
+    {partial && !checked && <div className="w-2 h-0.5 bg-blue-400 rounded-sm"/>}
+  </div>
 );
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -329,39 +337,64 @@ const KPICards = ({ totals, priorTotals }) => {
   );
 };
 
+const getFQ = (ym) => { const m = Number(ym.split("-")[1]); return m >= 4 ? Math.ceil((m - 3) / 3) : 4; };
+
 const FYMonthFilter = ({ values, onChange, allMonths }) => {
-  const [open, setOpen]       = useState(false);
-  const [expanded, setExpanded] = useState(() => new Set());
+  const [open, setOpen]           = useState(false);
+  const [expFY, setExpFY]         = useState(() => new Set());
+  const [expQ, setExpQ]           = useState(() => new Set());
   const ref = useRef(null);
   useOutsideClose(ref, open, setOpen);
 
   const fyTree = useMemo(() => {
     const groups = {};
     for (const ym of allMonths) {
-      const fy = getFY(ym);
-      if (!groups[fy]) groups[fy] = [];
-      groups[fy].push(ym);
+      const fy = getFY(ym), q = getFQ(ym);
+      if (!groups[fy]) groups[fy] = {};
+      if (!groups[fy][q]) groups[fy][q] = [];
+      groups[fy][q].push(ym);
     }
-    for (const fy in groups) groups[fy].sort((a, b) => b.localeCompare(a));
-    return Object.entries(groups).sort(([a],[b]) => b - a).map(([fy, months]) => ({ fy: Number(fy), months }));
+    return Object.entries(groups).sort(([a],[b]) => b - a).map(([fy, qs]) => ({
+      fy: Number(fy),
+      quarters: Object.entries(qs).sort(([a],[b]) => b - a).map(([q, months]) => ({
+        q: Number(q),
+        months: months.sort((a, b) => b.localeCompare(a)),
+      })),
+    }));
   }, [allMonths]);
 
-  const selected = values[0] || null;
+  const selSet = useMemo(() => new Set(values), [values]);
+  const allOf  = (ms) => ms.length > 0 && ms.every(m => selSet.has(m));
+  const someOf = (ms) => ms.some(m => selSet.has(m));
 
-  /* on open, expand only the FY containing the current selection */
+  const toggleGroup = (months) => {
+    const next = new Set(selSet);
+    if (allOf(months)) months.forEach(m => next.delete(m));
+    else months.forEach(m => next.add(m));
+    onChange([...next]);
+  };
+  const toggleMonth = (ym) => {
+    const next = new Set(selSet);
+    next.has(ym) ? next.delete(ym) : next.add(ym);
+    onChange([...next]);
+  };
+
+  /* on open, expand only the FYs/quarters containing current selections */
   useEffect(() => {
-    if (open) setExpanded(new Set(selected ? [getFY(selected)] : []));
-  }, [open, selected]);
+    if (!open) return;
+    setExpFY(new Set(values.map(getFY)));
+    setExpQ(new Set(values.map(ym => getFY(ym) + "-Q" + getFQ(ym))));
+  }, [open]);
 
-  const toggleFY = (fy) => setExpanded(prev => {
-    const n = new Set(prev);
-    n.has(fy) ? n.delete(fy) : n.add(fy);
-    return n;
-  });
+  const toggleExp = (setter, key) => setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
-  const pickMonth = (ym) => { onChange([ym]); setOpen(false); };
+  const displayLabel = values.length === 0 ? "Latest month"
+    : values.length === 1 ? fmtMonthKey(values[0])
+    : `${values.length} months`;
 
-  const displayLabel = selected ? fmtMonthKey(selected) : "Latest month";
+  const Chevron = ({ exp }) => (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" className={"transition-transform flex-shrink-0 " + (exp ? "rotate-90" : "")}><path d="M9 18l6-6-6-6"/></svg>
+  );
 
   return (
     <div ref={ref} className="relative flex-1 min-w-0">
@@ -371,22 +404,36 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
       </div>
       {open && (
         <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto" style={{ minWidth: "100%" }}>
-          {fyTree.map(({ fy, months }) => {
-            const isExp  = expanded.has(fy);
-            const hasSel = selected && months.includes(selected);
+          {fyTree.map(({ fy, quarters }) => {
+            const fyMonths = quarters.flatMap(q => q.months);
+            const fyExp    = expFY.has(fy);
             return (
               <div key={fy} className="border-b border-gray-100 last:border-b-0">
-                <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 select-none" style={{ padding: "10px 12px" }} onClick={() => toggleFY(fy)}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" className={"transition-transform flex-shrink-0 " + (isExp ? "rotate-90" : "")}><path d="M9 18l6-6-6-6"/></svg>
-                  <span className={"text-xs font-bold " + (hasSel ? "text-blue-700" : "text-gray-800")}>{getFYLabel(fy)}</span>
+                <div className="flex items-center gap-2 hover:bg-gray-50 select-none" style={{ padding: "10px 12px" }}>
+                  <span onClick={() => toggleExp(setExpFY, fy)} className="cursor-pointer flex items-center"><Chevron exp={fyExp}/></span>
+                  <Chk checked={allOf(fyMonths)} partial={someOf(fyMonths)} onClick={() => toggleGroup(fyMonths)} />
+                  <span className="text-xs font-bold text-gray-800 cursor-pointer" onClick={() => toggleExp(setExpFY, fy)}>{getFYLabel(fy)}</span>
                 </div>
-                {isExp && months.map(ym => {
-                  const isSel = ym === selected;
+                {fyExp && quarters.map(({ q, months }) => {
+                  const qKey = fy + "-Q" + q;
+                  const qExp = expQ.has(qKey);
                   return (
-                    <div key={ym} onClick={() => pickMonth(ym)} className={"flex items-center gap-2 cursor-pointer border-t border-dashed border-gray-200 select-none " + (isSel ? "bg-blue-50" : "hover:bg-gray-50")} style={{ padding: "10px 12px 10px 30px" }}>
-                      <span className={"text-xs font-semibold " + (isSel ? "text-blue-700" : "text-gray-700")}>{fmtMonthKey(ym)}</span>
-                      {isSel && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="3" className="ml-auto flex-shrink-0"><path d="M20 6L9 17l-5-5"/></svg>}
-                    </div>
+                    <React.Fragment key={qKey}>
+                      <div className="flex items-center gap-2 hover:bg-gray-50 border-t border-dashed border-gray-200 select-none" style={{ padding: "10px 12px 10px 28px" }}>
+                        <span onClick={() => toggleExp(setExpQ, qKey)} className="cursor-pointer flex items-center"><Chevron exp={qExp}/></span>
+                        <Chk checked={allOf(months)} partial={someOf(months)} onClick={() => toggleGroup(months)} />
+                        <span className="text-xs font-semibold text-gray-700 cursor-pointer" onClick={() => toggleExp(setExpQ, qKey)}>{`Q${q} ${getFYLabel(fy)}`}</span>
+                      </div>
+                      {qExp && months.map(ym => {
+                        const chk = selSet.has(ym);
+                        return (
+                          <div key={ym} onClick={() => toggleMonth(ym)} className="flex items-center gap-2 hover:bg-gray-50 border-t border-dotted border-gray-200 cursor-pointer select-none" style={{ padding: "10px 12px 10px 46px" }}>
+                            <Chk checked={chk} partial={false} onClick={(e) => { e.stopPropagation(); toggleMonth(ym); }} />
+                            <span className="text-xs font-medium text-gray-700">{fmtMonthKey(ym)}</span>
+                          </div>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -401,7 +448,7 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
 const fmtVal    = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 const fmtPct    = (v) => (v || 0).toFixed(1) + "%";
 const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
-const GRID      = "minmax(180px, 2fr) 1fr 1fr 1fr 1fr 1fr 1fr 90px";
+const GRID      = "minmax(200px, 1.6fr) 90px 85px 1fr 1fr 1fr 1fr 100px";
 const GAP       = { gap: "16px" };
 
 const SortTh = ({ col, label, right = false, sortCol, onSort }) => (
@@ -515,7 +562,7 @@ const UploadModal = ({ uploadState, handleUpload, hasData, onClose, fileRef }) =
           disabled={st === "uploading" || st === "success"}
           className={"w-full h-10 rounded-lg text-sm font-medium mt-7 transition-opacity " + (st === "uploading" || st === "success" ? "bg-blue-600 text-white opacity-35 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer")}
         >
-          Upload data
+          Upload Data
         </button>
       </div>
     </div>
@@ -532,8 +579,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [selCustomer, setSelCustomer]   = useState([]);
   const [selProducts, setSelProducts]   = useState([]);
   const [selCountry, setSelCountry]     = useState([]);
-  const [expanded, setExpanded]         = useState(new Set());
-  const [expandedCust, setExpandedCust] = useState(new Set());
+  const [expandedCust, setExpandedCust]       = useState(new Set());
+  const [expandedCountry, setExpandedCountry] = useState(new Set());
+  const [expandedPartner, setExpandedPartner] = useState(new Set());
   const [sortCol, setSortCol]           = useState(null);
   const [sortDir, setSortDir]           = useState("desc");
   const [partnerPage, setPartnerPage]   = useState(0);
@@ -551,12 +599,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     [selMonths, latestMonth]
   );
 
-  const priorYearMonths = useMemo(() =>
-    effectiveMonths
-      .map(ym => { const [y, m] = ym.split("-").map(Number); return `${y - 1}-${String(m).padStart(2, "0")}`; })
-      .filter(ym => sortedMonths.includes(ym)),
-    [effectiveMonths, sortedMonths]
-  );
+  const priorYearMonths = useMemo(() => {
+    const mapped = effectiveMonths.map(ym => { const [y, m] = ym.split("-").map(Number); return `${y - 1}-${String(m).padStart(2, "0")}`; });
+    return mapped.every(ym => sortedMonths.includes(ym)) ? mapped : [];
+  }, [effectiveMonths, sortedMonths]);
 
   const parseValue = useCallback((v) => parseFloat((v || "").toString().replace(/[^0-9.-]/g, "")) || 0, []);
 
@@ -635,7 +681,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
 
   /* ── Aggregate ── */
   const aggregate = useCallback((months, partnerFilter, customerFilter, prodFilter, countryFilter, totalsOnly = false) => {
-    const empty = { byPartner: {}, totals: { upsell: 0, crosssell: 0, new: 0, total: 0 } };
+    const empty = { byCustomer: {}, totals: { upsell: 0, crosssell: 0, new: 0, total: 0 } };
     if (!months || !months.length) return empty;
     const rows = allRows.filter(r => {
       if (!months.includes(r._reportingMonth)) return false;
@@ -645,32 +691,34 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       if (countryFilter.length  && !countryFilter.includes((r["Country"]      || "").trim())) return false;
       return true;
     });
-    const byPartner = {}, totals = { upsell: 0, crosssell: 0, new: 0, total: 0 };
+    const byCustomer = {}, totals = { upsell: 0, crosssell: 0, new: 0, total: 0 };
     for (const row of rows) {
-      const type = typeMap[row._id] || "new";
-      const val  = parseValue(row["Value"]);
+      const type    = typeMap[row._id] || "new";
+      const val     = parseValue(row["Value"]);
       totals[type] += val; totals.total += val;
       if (totalsOnly) continue;
-      const pID  = (row["Partner ID"]    || "").trim() || "unknown";
-      const pNm  = (row["Partner Name"]  || "").trim() || "Unknown Partner";
-      const cID  = (row["Customer ID"]   || "").trim() || "unknown";
-      const cNm  = (row["Customer Name"] || "").trim() || "Unknown Customer";
-      const prod = (row["Product"] || "").trim();
-      if (!byPartner[pID]) byPartner[pID] = { name: pNm, upsell: 0, crosssell: 0, new: 0, total: 0, customers: {} };
-      byPartner[pID][type] += val; byPartner[pID].total += val;
-      if (!byPartner[pID].customers[cID])
-        byPartner[pID].customers[cID] = { name: cNm, upsell: 0, crosssell: 0, new: 0, total: 0, productBreakdown: {} };
-      byPartner[pID].customers[cID][type] += val; byPartner[pID].customers[cID].total += val;
+      const cID     = (row["Customer ID"]   || "").trim() || "unknown";
+      const cNm     = (row["Customer Name"] || "").trim() || "Unknown Customer";
+      const country = (row["Country"]       || "").trim() || "Unknown";
+      const pID     = (row["Partner ID"]    || "").trim() || "unknown";
+      const pNm     = (row["Partner Name"]  || "").trim() || "Unknown Partner";
+      const prod    = (row["Product"]       || "").trim();
+      if (!byCustomer[cID]) byCustomer[cID] = { name: cNm, upsell: 0, crosssell: 0, new: 0, total: 0, countries: {} };
+      byCustomer[cID][type] += val; byCustomer[cID].total += val;
+      if (!byCustomer[cID].countries[country]) byCustomer[cID].countries[country] = { upsell: 0, crosssell: 0, new: 0, total: 0, partners: {} };
+      byCustomer[cID].countries[country][type] += val; byCustomer[cID].countries[country].total += val;
+      if (!byCustomer[cID].countries[country].partners[pID]) byCustomer[cID].countries[country].partners[pID] = { name: pNm, upsell: 0, crosssell: 0, new: 0, total: 0, productBreakdown: {} };
+      byCustomer[cID].countries[country].partners[pID][type] += val; byCustomer[cID].countries[country].partners[pID].total += val;
       if (prod) {
-        const pb = byPartner[pID].customers[cID].productBreakdown;
+        const pb = byCustomer[cID].countries[country].partners[pID].productBreakdown;
         if (!pb[prod]) pb[prod] = { upsell: 0, crosssell: 0, new: 0, total: 0 };
         pb[prod][type] += val; pb[prod].total += val;
       }
     }
-    return { byPartner, totals };
+    return { byCustomer, totals };
   }, [allRows, typeMap, parseValue]);
 
-  const { byPartner: currentPartners, totals: currentTotals } = useMemo(
+  const { byCustomer: currentCustomers, totals: currentTotals } = useMemo(
     () => aggregate(effectiveMonths, selPartner, selCustomer, selProducts, selCountry),
     [aggregate, effectiveMonths, selPartner, selCustomer, selProducts, selCountry]
   );
@@ -679,17 +727,19 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     [aggregate, priorYearMonths, selPartner, selCustomer, selProducts, selCountry]
   );
 
-  /* ── All-time lifecycle data ── */
+  /* ── All-time lifecycle data (per customer per country) ── */
   const customerLifecycleData = useMemo(() => {
     const m = {};
     for (const row of allRows) {
-      const cID  = (row["Customer ID"]  || "").trim();
-      const pNm  = (row["Partner Name"] || "").trim();
-      const prod = (row["Product"]      || "").trim();
+      const cID     = (row["Customer ID"]  || "").trim();
+      const country = (row["Country"]      || "").trim() || "Unknown";
+      const pNm     = (row["Partner Name"] || "").trim();
+      const prod    = (row["Product"]      || "").trim();
       if (!cID) continue;
-      if (!m[cID]) m[cID] = { partners: new Set(), products: new Set() };
-      if (pNm)  m[cID].partners.add(pNm);
-      if (prod) m[cID].products.add(prod);
+      if (!m[cID]) m[cID] = {};
+      if (!m[cID][country]) m[cID][country] = { partners: new Set(), products: new Set() };
+      if (pNm)  m[cID][country].partners.add(pNm);
+      if (prod) m[cID][country].products.add(prod);
     }
     return m;
   }, [allRows]);
@@ -697,42 +747,43 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const toggleSort = useCallback((col) => {
     if (sortCol === col) { if (sortDir === "desc") setSortDir("asc"); else { setSortCol(null); setSortDir("desc"); } }
     else { setSortCol(col); setSortDir("desc"); }
-    setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0);
+    setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0);
   }, [sortCol, sortDir]);
 
-  const toggleExpand     = useCallback((pID) => setExpanded(prev => { const n = new Set(prev); n.has(pID) ? n.delete(pID) : n.add(pID); return n; }), []);
-  const toggleExpandCust = useCallback((pID, cID) => { const k = pID+"|||"+cID; setExpandedCust(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; }); }, []);
+  const toggleExpand        = useCallback((cID) => setExpandedCust(prev => { const n = new Set(prev); n.has(cID) ? n.delete(cID) : n.add(cID); return n; }), []);
+  const toggleExpandCountry = useCallback((cID, country) => { const k = cID+"|||"+country; setExpandedCountry(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; }); }, []);
+  const toggleExpandPartner = useCallback((cID, country, pID) => { const k = cID+"|||"+country+"|||"+pID; setExpandedPartner(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; }); }, []);
 
-  const partnerNames = useMemo(() => {
-    const ids = Object.keys(currentPartners);
+  const customerNames = useMemo(() => {
+    const ids = Object.keys(currentCustomers);
     return sortCol
       ? [...ids].sort((a, b) => {
-          const pa = currentPartners[a], pb = currentPartners[b];
-          if (sortCol === "partner")   { const d = pa.name.toLowerCase().localeCompare(pb.name.toLowerCase()); return sortDir === "desc" ? d : -d; }
+          const ca = currentCustomers[a], cb = currentCustomers[b];
+          if (sortCol === "customer")  { const d = ca.name.toLowerCase().localeCompare(cb.name.toLowerCase()); return sortDir === "desc" ? d : -d; }
           let av, bv;
-          if      (sortCol === "upsell")    { av = pa.upsell;     bv = pb.upsell;     }
-          else if (sortCol === "crosssell") { av = pa.crosssell;  bv = pb.crosssell;  }
-          else if (sortCol === "new")       { av = pa.new;        bv = pb.new;        }
-          else if (sortCol === "total")     { av = pa.total;      bv = pb.total;      }
-          else if (sortCol === "recap")     { av = recapRate(pa); bv = recapRate(pb); }
+          if      (sortCol === "upsell")    { av = ca.upsell;     bv = cb.upsell;     }
+          else if (sortCol === "crosssell") { av = ca.crosssell;  bv = cb.crosssell;  }
+          else if (sortCol === "new")       { av = ca.new;        bv = cb.new;        }
+          else if (sortCol === "total")     { av = ca.total;      bv = cb.total;      }
+          else if (sortCol === "recap")     { av = recapRate(ca); bv = recapRate(cb); }
           return sortDir === "desc" ? (bv - av) : (av - bv);
         })
-      : [...ids].sort((a, b) => currentPartners[a].name.localeCompare(currentPartners[b].name));
-  }, [currentPartners, sortCol, sortDir]);
+      : [...ids].sort((a, b) => currentCustomers[a].name.localeCompare(currentCustomers[b].name));
+  }, [currentCustomers, sortCol, sortDir]);
 
-  useEffect(() => { setPartnerPage(0); setExpanded(new Set()); setExpandedCust(new Set()); }, [selPartner, selCustomer, selProducts, selCountry, selMonths]);
+  useEffect(() => { setPartnerPage(0); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); }, [selPartner, selCustomer, selProducts, selCountry, selMonths]);
 
-  const totalPartnerPages = Math.max(1, Math.ceil(partnerNames.length / PAGE_SIZE));
-  const safePartnerPage   = Math.min(partnerPage, totalPartnerPages - 1);
-  const pagedPartnerNames = partnerNames.slice(safePartnerPage * PAGE_SIZE, (safePartnerPage + 1) * PAGE_SIZE);
-  const uniqueCustomerCount = useMemo(() => Object.values(currentPartners).reduce((s, pd) => s + Object.keys(pd.customers).length, 0), [currentPartners]);
+  const totalPartnerPages  = Math.max(1, Math.ceil(customerNames.length / PAGE_SIZE));
+  const safePartnerPage    = Math.min(partnerPage, totalPartnerPages - 1);
+  const pagedCustomerNames = customerNames.slice(safePartnerPage * PAGE_SIZE, (safePartnerPage + 1) * PAGE_SIZE);
+  const uniquePartnerCount = useMemo(() => { const s = new Set(); Object.values(currentCustomers).forEach(cd => Object.values(cd.countries).forEach(ctd => Object.keys(ctd.partners).forEach(pID => s.add(pID)))); return s.size; }, [currentCustomers]);
 
   const hasFilters = (selMonths.length !== 1 || selMonths[0] !== latestMonth) || selPartner.length > 0 || selCustomer.length > 0 || selProducts.length > 0 || selCountry.length > 0 || sortCol !== null;
 
   const resetAll = useCallback(() => {
     setSelMonths(latestMonth ? [latestMonth] : []); setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
     setSortCol(null); setSortDir("desc");
-    setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0);
+    setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0);
   }, [latestMonth]);
 
   return (
@@ -742,7 +793,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       {/* Filter bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2">
-          <FYMonthFilter values={selMonths} onChange={v => { setSelMonths(v); setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0); }} allMonths={sortedMonths} />
+          <FYMonthFilter values={selMonths} onChange={v => { setSelMonths(v); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0); }} allMonths={sortedMonths} />
           <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v);  setSelCustomer([]); setPartnerPage(0); }} options={partnerOptions}  placeholder="Partner"  searchable/></div>
           <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }}                   options={customerOptions} placeholder="Customer" searchable/></div>
           <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts} options={productOptions} placeholder="Product"/></div>
@@ -755,7 +806,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       </div>
 
       {/* Table */}
-      {partnerNames.length === 0
+      {customerNames.length === 0
         ? <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <p className="text-sm text-gray-500">No data for selected filters</p>
           </div>
@@ -766,9 +817,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
               <div className="flex items-center gap-3 text-xs text-gray-500">
                 <span>{allRows.length.toLocaleString()} rows imported</span>
                 <span className="text-gray-300 text-sm select-none">|</span>
-                <span>{partnerNames.length.toLocaleString()} unique partner{partnerNames.length !== 1 ? "s" : ""}</span>
+                <span>{customerNames.length.toLocaleString()} unique customer{customerNames.length !== 1 ? "s" : ""}</span>
                 <span className="text-gray-300 text-sm select-none">|</span>
-                <span>{uniqueCustomerCount.toLocaleString()} unique customer{uniqueCustomerCount !== 1 ? "s" : ""}</span>
+                <span>{uniquePartnerCount.toLocaleString()} unique partner{uniquePartnerCount !== 1 ? "s" : ""}</span>
               </div>
               {totalPartnerPages > 1 && (
                 <div className="flex items-center">
@@ -786,7 +837,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                     item === null
                       ? <span key={i} className="text-gray-300 mx-1">·</span>
                       : item[1]
-                        ? <button key={i} onClick={() => { item[1](); setExpanded(new Set()); setExpandedCust(new Set()); }} disabled={item[2]}
+                        ? <button key={i} onClick={() => { item[1](); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); }} disabled={item[2]}
                             className={"px-2 py-1 text-xs font-medium transition " + (item[2] ? "text-gray-300 cursor-not-allowed" : "text-gray-500 hover:text-gray-700")}>
                             {item[0]}
                           </button>
@@ -801,94 +852,126 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
               <span></span>
               <span/>
               <span/>
-              <SortTh col="upsell"    label="Upsell"     sortCol={sortCol} onSort={toggleSort}/>
-              <SortTh col="crosssell" label="Cross-sell" sortCol={sortCol} onSort={toggleSort}/>
-              <SortTh col="new"       label="New"        sortCol={sortCol} onSort={toggleSort}/>
-              <SortTh col="total"     label="Total"      sortCol={sortCol} onSort={toggleSort}/>
+              <SortTh col="upsell"    label="Upsell"     sortCol={sortCol} onSort={toggleSort} right/>
+              <SortTh col="crosssell" label="Cross-sell" sortCol={sortCol} onSort={toggleSort} right/>
+              <SortTh col="new"       label="New"        sortCol={sortCol} onSort={toggleSort} right/>
+              <SortTh col="total"     label="Total"      sortCol={sortCol} onSort={toggleSort} right/>
               <SortTh col="recap"     label="Recapture"  sortCol={sortCol} onSort={toggleSort} right/>
             </div>
 
-            {/* Partner rows */}
-            {pagedPartnerNames.map((pID, pi) => {
-              const pd      = currentPartners[pID];
-              const isExp   = expanded.has(pID);
-              const rate    = recapRate(pd);
-              const custIDs = Object.keys(pd.customers).sort();
+            {/* Customer rows */}
+            {pagedCustomerNames.map((cID, ci) => {
+              const cd          = currentCustomers[cID];
+              const isExp       = expandedCust.has(cID);
+              const rate        = recapRate(cd);
+              const countryKeys = Object.keys(cd.countries).sort();
               return (
-                <div key={pID} className={pi > 0 ? "border-t border-gray-200" : ""}>
+                <div key={cID} className={ci > 0 ? "border-t border-gray-200" : ""}>
 
-                  {/* Partner row */}
-                  <div onClick={() => toggleExpand(pID)} className="grid items-center px-4 py-3 cursor-pointer hover:bg-gray-50 transition select-none" style={{gridTemplateColumns: GRID, ...GAP}}>
+                  {/* Customer row */}
+                  <div onClick={() => toggleExpand(cID)} className="grid items-center px-4 py-3 cursor-pointer hover:bg-gray-50 transition select-none" style={{gridTemplateColumns: GRID, ...GAP}}>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" className={"transition-transform flex-shrink-0 " + (isExp ? "rotate-90" : "")}><path d="M9 18l6-6-6-6"/></svg>
-                      <div className="w-[18px] h-[18px] rounded bg-blue-50 flex items-center justify-center flex-shrink-0">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"/></svg>
+                      <div className="w-[18px] h-[18px] rounded bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
                       </div>
-                      <span className="text-xs font-medium text-gray-800 truncate" title={pd.name}>{pd.name}</span>
+                      <span className="text-xs font-medium text-gray-800 truncate" title={cd.name}>{cd.name}</span>
                     </div>
-                    <div className="flex items-center"><CntBadge label={`${custIDs.length} customer${custIDs.length !== 1 ? "s" : ""}`}/></div>
-                    <div className="flex items-center"><IDBadge id={pID}/></div>
-                    <span className="text-xs font-medium text-gray-900">{fmtVal(pd.upsell)}</span>
-                    <span className="text-xs font-medium text-gray-900">{fmtVal(pd.crosssell)}</span>
-                    <span className="text-xs font-medium text-gray-900">{fmtVal(pd.new)}</span>
-                    <span className="text-xs font-medium text-gray-900">{fmtVal(pd.total)}</span>
+                    <div className="flex items-center"><CntBadge label={`${countryKeys.length} countr${countryKeys.length !== 1 ? "ies" : "y"}`}/></div>
+                    <div className="flex items-center"><IDBadge id={cID}/></div>
+                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.upsell)}</span>
+                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.crosssell)}</span>
+                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.new)}</span>
+                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.total)}</span>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtPct(rate)}</span>
                   </div>
 
-                  {/* Customer rows */}
-                  {isExp && custIDs.map((cID) => {
-                    const cd      = pd.customers[cID];
-                    const custKey = pID + "|||" + cID;
-                    const isExpC  = expandedCust.has(custKey);
-                    const prodKeys= Object.keys(cd.productBreakdown).sort();
-                    const custRate= recapRate(cd);
-                    const lcData  = customerLifecycleData[cID] || { partners: new Set(), products: new Set() };
-
+                  {/* Country rows */}
+                  {isExp && countryKeys.map((country) => {
+                    const ctd         = cd.countries[country];
+                    const ctKey       = cID + "|||" + country;
+                    const isExpC      = expandedCountry.has(ctKey);
+                    const partnerKeys = Object.keys(ctd.partners).sort();
+                    const ctRate      = recapRate(ctd);
+                    const lcData      = customerLifecycleData[cID]?.[country] || { partners: new Set(), products: new Set() };
                     return (
-                      <React.Fragment key={cID}>
-                        {/* Customer row */}
-                        <div onClick={e => { e.stopPropagation(); toggleExpandCust(pID, cID); }}
-                          className="grid items-center px-4 py-2.5 border-t border-dashed border-gray-200 cursor-pointer hover:bg-blue-50/20 transition select-none"
+                      <React.Fragment key={ctKey}>
+
+                        {/* Country row */}
+                        <div onClick={e => { e.stopPropagation(); toggleExpandCountry(cID, country); }}
+                          className="grid items-center px-4 py-2.5 border-t border-dashed border-gray-200 cursor-pointer hover:bg-orange-50/20 transition select-none"
                           style={{gridTemplateColumns: GRID, ...GAP}}>
                           <div className="flex items-center gap-1.5 min-w-0" style={{marginLeft:"16px"}}>
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" className={"transition-transform flex-shrink-0 " + (isExpC ? "rotate-90" : "")}><path d="M9 18l6-6-6-6"/></svg>
-                            <div className="w-[16px] h-[16px] rounded bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
+                            <div className="w-[16px] h-[16px] rounded bg-orange-50 flex items-center justify-center flex-shrink-0">
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
                             </div>
-                            <span className="text-xs font-medium text-gray-700 truncate" title={cd.name}>{cd.name}</span>
+                            <span className="text-xs font-medium text-gray-700 truncate" title={country}>{country}</span>
                           </div>
-                          <div className="flex items-center"><CntBadge label={`${prodKeys.length} product${prodKeys.length !== 1 ? "s" : ""}`}/></div>
-                          <div className="flex items-center"><IDBadge id={cID}/></div>
-                          <span className="text-xs text-gray-700">{cd.upsell    > 0 ? fmtVal(cd.upsell)    : <Dash/>}</span>
-                          <span className="text-xs text-gray-700">{cd.crosssell > 0 ? fmtVal(cd.crosssell) : <Dash/>}</span>
-                          <span className="text-xs text-gray-700">{cd.new       > 0 ? fmtVal(cd.new)       : <Dash/>}</span>
-                          <span className="text-xs text-gray-700">{fmtVal(cd.total)}</span>
-                          <span className="text-xs text-gray-700 text-right">{fmtPct(custRate)}</span>
+                          <div className="flex items-center"><CntBadge label={`${partnerKeys.length} partner${partnerKeys.length !== 1 ? "s" : ""}`}/></div>
+                          <span/>
+                          <span className="text-xs text-gray-700 text-right">{ctd.upsell    !== 0 ? fmtVal(ctd.upsell)    : <Dash/>}</span>
+                          <span className="text-xs text-gray-700 text-right">{ctd.crosssell !== 0 ? fmtVal(ctd.crosssell) : <Dash/>}</span>
+                          <span className="text-xs text-gray-700 text-right">{ctd.new       !== 0 ? fmtVal(ctd.new)       : <Dash/>}</span>
+                          <span className="text-xs text-gray-700 text-right">{fmtVal(ctd.total)}</span>
+                          <span className="text-xs text-gray-700 text-right">{fmtPct(ctRate)}</span>
                         </div>
 
-                        {/* Product rows */}
-                        {isExpC && prodKeys.map(product => {
-                          const prd = cd.productBreakdown[product];
+                        {/* Partner rows */}
+                        {isExpC && partnerKeys.map((pID) => {
+                          const pd       = ctd.partners[pID];
+                          const pKey     = ctKey + "|||" + pID;
+                          const isExpP   = expandedPartner.has(pKey);
+                          const prodKeys = Object.keys(pd.productBreakdown).sort();
+                          const pRate    = recapRate(pd);
                           return (
-                            <div key={product} className="grid items-center px-4 py-2 bg-gray-50/70 border-t border-dotted border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
-                              <div className="flex items-center gap-1.5 min-w-0" style={{marginLeft:"48px"}}>
-                                <div className="w-[16px] h-[16px] rounded bg-violet-50 flex items-center justify-center flex-shrink-0">
-                                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                            <React.Fragment key={pKey}>
+
+                              {/* Partner row */}
+                              <div onClick={e => { e.stopPropagation(); toggleExpandPartner(cID, country, pID); }}
+                                className="grid items-center px-4 py-2.5 border-t border-dashed border-gray-200 cursor-pointer hover:bg-blue-50/20 transition select-none"
+                                style={{gridTemplateColumns: GRID, ...GAP}}>
+                                <div className="flex items-center gap-1.5 min-w-0" style={{marginLeft:"32px"}}>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" className={"transition-transform flex-shrink-0 " + (isExpP ? "rotate-90" : "")}><path d="M9 18l6-6-6-6"/></svg>
+                                  <div className="w-[16px] h-[16px] rounded bg-blue-50 flex items-center justify-center flex-shrink-0">
+                                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"/></svg>
+                                  </div>
+                                  <span className="text-xs font-medium text-gray-700 truncate" title={pd.name}>{pd.name}</span>
                                 </div>
-                                <Badge text={product} className={hashProductColor(product)}/>
+                                <div className="flex items-center"><CntBadge label={`${prodKeys.length} product${prodKeys.length !== 1 ? "s" : ""}`}/></div>
+                                <div className="flex items-center"><IDBadge id={pID}/></div>
+                                <span className="text-xs text-gray-700 text-right">{pd.upsell    !== 0 ? fmtVal(pd.upsell)    : <Dash/>}</span>
+                                <span className="text-xs text-gray-700 text-right">{pd.crosssell !== 0 ? fmtVal(pd.crosssell) : <Dash/>}</span>
+                                <span className="text-xs text-gray-700 text-right">{pd.new       !== 0 ? fmtVal(pd.new)       : <Dash/>}</span>
+                                <span className="text-xs text-gray-700 text-right">{fmtVal(pd.total)}</span>
+                                <span className="text-xs text-gray-700 text-right">{fmtPct(pRate)}</span>
                               </div>
-                              <span/>
-                              <span/>
-                              {["upsell","crosssell","new"].map(t => (
-                                <span key={t} className="text-xs text-gray-600">{prd[t] !== 0 ? fmtVal(prd[t]) : <Dash/>}</span>
-                              ))}
-                              <span className="text-xs font-medium text-gray-700">{fmtVal(prd.total)}</span>
-                              <span className="text-right"><Dash/></span>
-                            </div>
+
+                              {/* Product rows */}
+                              {isExpP && prodKeys.map(product => {
+                                const prd = pd.productBreakdown[product];
+                                return (
+                                  <div key={product} className="grid items-center px-4 py-2 bg-gray-50/70 border-t border-dotted border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
+                                    <div className="flex items-center gap-1.5 min-w-0" style={{marginLeft:"48px"}}>
+                                      <div className="w-[16px] h-[16px] rounded bg-violet-50 flex items-center justify-center flex-shrink-0">
+                                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                                      </div>
+                                      <Badge text={product} className={hashProductColor(product)}/>
+                                    </div>
+                                    <span/><span/>
+                                    {["upsell","crosssell","new"].map(t => (
+                                      <span key={t} className="text-xs text-gray-600 text-right">{prd[t] !== 0 ? fmtVal(prd[t]) : <Dash/>}</span>
+                                    ))}
+                                    <span className="text-xs font-medium text-gray-700 text-right">{fmtVal(prd.total)}</span>
+                                    <span className="text-right"><Dash/></span>
+                                  </div>
+                                );
+                              })}
+                            </React.Fragment>
                           );
                         })}
 
-                        {/* Lifecycle rows — indent 1, always shown when customer is expanded */}
+                        {/* Lifecycle rows — visible when country is expanded, 1st-degree indent */}
                         {isExpC && (
                           <>
                             <div className="px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20">
@@ -1032,7 +1115,7 @@ function App() {
 
       /* ── Phase 2: normalize + import ── */
       const isBlank = v => !v.trim() || ["na","n/a","#n/a","#na"].includes(v.trim().toLowerCase());
-      const STRICT_COLS = REQUIRED_COLS.filter(c => c !== "amount");
+      const STRICT_COLS = REQUIRED_COLS.filter(c => c !== "amount" && c !== "SubscriptionName");
       let batchRows = [];
       let totalSkipped = 0;
 
@@ -1056,7 +1139,7 @@ function App() {
           "Customer ID":   (r["custid"]           || "").trim(),
           "Partner Name":  extractPartnerName(r["partnername"]),
           "Partner ID":    extractPartnerID(r["partnername"]),
-          "Product":       (r["SubscriptionName"] || "").trim(),
+          "Product":       isBlank(r["SubscriptionName"] || "") ? "Blank" : (r["SubscriptionName"] || "").trim(),
           "Value":         ((r["amount"]           || "").trim() || "0"),
           "Country":       extractCountry(r["storeid"]),
         }));
