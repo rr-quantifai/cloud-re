@@ -462,6 +462,68 @@ const CntBadge = ({ label }) => <span className="inline-block px-1.5 py-px text-
 const Dash     = ()          => <span className="text-gray-200 text-xs">—</span>;
 
 /* ═══════════════════════════════════════════════════════════════════
+   AI INSIGHTS MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+const AIInsightsModal = ({ open, customerName, products, onClose, onAnalyzeAgain, loading, content, failed }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }}>
+      <div className="bg-white rounded-2xl relative" style={{ width: "560px", maxHeight: "80vh", padding: "32px", overflow: "auto" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+          <div>
+            <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">AI Recommendations</p>
+            <h3 className="text-lg font-bold text-gray-900 mt-1">{customerName}</h3>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="mb-6 min-h-32">
+          {loading && <div className="flex items-center justify-center h-32"><Dots /></div>}
+          {!loading && !failed && (
+            <div className="text-sm text-gray-700 leading-relaxed">
+              {content?.split("\n\n").map((block, i) => {
+                const lines = block.split("\n");
+                const isHeading = lines[0] && !lines[0].startsWith("-");
+                if (isHeading) {
+                  const heading = lines[0];
+                  const bullets = lines.slice(1).filter(l => l.trim().startsWith("-"));
+                  return (
+                    <div key={i} className="mb-4 last:mb-0">
+                      <h4 className="font-semibold text-gray-900 mb-2">{heading}</h4>
+                      <ul className="ml-4 space-y-1">
+                        {bullets.map((bullet, bi) => (
+                          <li key={bi} className="text-gray-700 list-disc">{bullet.replace(/^-\s*/, "").replace(/\.$/, "")}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                }
+                return null;
+              })}
+            </div>
+          )}
+          {failed && <div className="flex items-center justify-center h-32"><p className="text-sm text-gray-400">Unable to load</p></div>}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+          <button onClick={onAnalyzeAgain} disabled={loading || failed} className={"flex-1 h-9 rounded-lg text-sm font-medium transition " + (loading || failed ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-blue-50 text-blue-600 hover:bg-blue-100")}>
+            Analyze Again
+          </button>
+          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════════
    UPLOAD MODAL
    ═══════════════════════════════════════════════════════════════════ */
 const UploadModal = ({ uploadState, handleUpload, hasData, onClose, fileRef }) => {
@@ -570,6 +632,23 @@ const UploadModal = ({ uploadState, handleUpload, hasData, onClose, fileRef }) =
   );
 };
 
+/* ─ Claude API call for Microsoft recommendations ─ */
+const callClaudeAPI = async (customerName, products) => {
+  const response = await fetch("/.netlify/functions/get-microsoft-recommendations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customerName, products: [...products] }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || `API call failed (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data.content;
+};
+
 /* ═══════════════════════════════════════════════════════════════════
    TRACKER VIEW
    ═══════════════════════════════════════════════════════════════════ */
@@ -583,7 +662,37 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [expandedCust, setExpandedCust]       = useState(new Set());
   const [expandedCountry, setExpandedCountry] = useState(new Set());
   const [expandedPartner, setExpandedPartner] = useState(new Set());
+  const [aiModalOpen, setAIModalOpen]       = useState(false);
+  const [aiCustomerName, setAICustomerName] = useState("");
+  const [aiProducts, setAIProducts]         = useState(new Set());
+  const [aiLoading, setAILoading]           = useState(false);
+  const [aiContent, setAIContent]           = useState("");
+  const [aiFailed, setAIFailed]             = useState(false);
   const [sortCol, setSortCol]           = useState(null);
+
+  const openAIModal = useCallback((cNm, products) => {
+    setAICustomerName(cNm);
+    setAIProducts(products);
+    setAILoading(true);
+    setAIContent("");
+    setAIFailed(false);
+    setAIModalOpen(true);
+    callClaudeAPI(cNm, products)
+      .then(setAIContent)
+      .catch((err) => { console.error("[CloudRe] AI:", err); setAIFailed(true); })
+      .finally(() => setAILoading(false));
+  }, []);
+
+  const onAnalyzeAgain = useCallback(() => {
+    setAILoading(true);
+    setAIContent("");
+    setAIFailed(false);
+    callClaudeAPI(aiCustomerName, aiProducts)
+      .then(setAIContent)
+      .catch((err) => { console.error("[CloudRe] AI:", err); setAIFailed(true); })
+      .finally(() => setAILoading(false));
+  }, [aiCustomerName, aiProducts]);
+
   const [sortDir, setSortDir]           = useState("desc");
   const [partnerPage, setPartnerPage]   = useState(0);
 
@@ -979,8 +1088,15 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                             <div className="px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20">
                               <div className="flex items-start gap-3" style={{marginLeft:"16px"}}>
                                 <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap pt-0.5 flex-shrink-0" style={{minWidth:"160px"}}>All products purchased</span>
-                                <div className="flex flex-wrap gap-1">
+                                <div className="flex flex-wrap gap-1 items-center">
                                   {[...lcData.products].sort().map(p => <Badge key={p} text={p} className={hashProductColor(p)}/>)}
+                                  <button
+                                    onClick={() => openAIModal(cd.name, lcData.products)}
+                                    title="Get AI Insights"
+                                    className="ml-2 w-6 h-6 rounded-md flex items-center justify-center text-blue-600 hover:bg-blue-50 transition flex-shrink-0"
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -1002,6 +1118,16 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
             })}
           </div>
       }
+      <AIInsightsModal
+        open={aiModalOpen}
+        customerName={aiCustomerName}
+        products={aiProducts}
+        onClose={() => setAIModalOpen(false)}
+        onAnalyzeAgain={onAnalyzeAgain}
+        loading={aiLoading}
+        content={aiContent}
+        failed={aiFailed}
+      />
     </div>
   );
 };
