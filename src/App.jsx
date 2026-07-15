@@ -329,7 +329,7 @@ const KPICards = ({ totals, priorTotals }) => {
           <div className="text-lg font-medium text-gray-900 tracking-tight mb-2.5">{val}</div>
           <div className="flex items-center gap-1.5">
             <ChangeChip curr={curr} prior={prior} isPct={isPct}/>
-            {prior != null && <span className="text-[10px] text-gray-400">vs prior year</span>}
+            {prior != null && <span className="text-[10px] text-gray-400">vs. prior year</span>}
           </div>
         </div>
       ))}
@@ -388,7 +388,7 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
 
   const toggleExp = (setter, key) => setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
-  const displayLabel = values.length === 0 ? "Latest month"
+  const displayLabel = values.length === 0 ? "Month"
     : values.length === 1 ? fmtMonthKey(values[0])
     : `${values.length} months`;
 
@@ -427,7 +427,8 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
                       {qExp && months.map(ym => {
                         const chk = selSet.has(ym);
                         return (
-                          <div key={ym} onClick={() => toggleMonth(ym)} className="flex items-center gap-2 hover:bg-gray-50 border-t border-dotted border-gray-200 cursor-pointer select-none" style={{ padding: "10px 12px 10px 46px" }}>
+                          <div key={ym} onClick={() => toggleMonth(ym)} className="flex items-center gap-2 hover:bg-gray-50 border-t border-dotted border-gray-200 cursor-pointer select-none" style={{ padding: "10px 12px 10px 44px" }}>
+                            <span className="w-[11px] flex-shrink-0"/>
                             <Chk checked={chk} partial={false} onClick={(e) => { e.stopPropagation(); toggleMonth(ym); }} />
                             <span className="text-xs font-medium text-gray-700">{fmtMonthKey(ym)}</span>
                           </div>
@@ -794,10 +795,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2">
           <FYMonthFilter values={selMonths} onChange={v => { setSelMonths(v); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0); }} allMonths={sortedMonths} />
-          <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v);  setSelCustomer([]); setPartnerPage(0); }} options={partnerOptions}  placeholder="Partner"  searchable/></div>
-          <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }}                   options={customerOptions} placeholder="Customer" searchable/></div>
-          <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts} options={productOptions} placeholder="Product"/></div>
-          <div className="flex-1 min-w-0"><MultiSel values={selCountry}  onChange={setSelCountry}  options={countryOptions} placeholder="Country"/></div>
+          <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }}              options={customerOptions} placeholder="Customer" searchable/></div>
+          <div className="flex-1 min-w-0"><MultiSel values={selCountry}  onChange={setSelCountry}                                               options={countryOptions}  placeholder="Country"/></div>
+          <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v);  setPartnerPage(0); }}              options={partnerOptions}  placeholder="Partner"  searchable/></div>
+          <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts}                                              options={productOptions}  placeholder="Product"/></div>
           <button onClick={resetAll} disabled={!hasFilters}
             className={"h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>
             Reset All Filters
