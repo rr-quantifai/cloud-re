@@ -177,13 +177,6 @@ const Badge = ({ text, className }) => (
   <span className={"inline-block px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap max-w-[180px] truncate " + (className||"")} title={text}>{text}</span>
 );
 
-const Chk = ({ checked, partial, onClick }) => (
-  <div onClick={onClick} className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition " + (checked ? "border-blue-600" : partial ? "border-blue-400" : "border-gray-300 hover:border-gray-400")}>
-    {checked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="4"><path d="M20 6L9 17l-5-5"/></svg>}
-    {partial && !checked && <div className="w-2 h-0.5 bg-blue-400 rounded-sm"/>}
-  </div>
-);
-
 /* ═══════════════════════════════════════════════════════════════════
    DROPDOWN COMPONENTS
    ═══════════════════════════════════════════════════════════════════ */
@@ -337,7 +330,8 @@ const KPICards = ({ totals, priorTotals }) => {
 };
 
 const FYMonthFilter = ({ values, onChange, allMonths }) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]       = useState(false);
+  const [expanded, setExpanded] = useState(() => new Set());
   const ref = useRef(null);
   useOutsideClose(ref, open, setOpen);
 
@@ -352,15 +346,22 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
     return Object.entries(groups).sort(([a],[b]) => b - a).map(([fy, months]) => ({ fy: Number(fy), months }));
   }, [allMonths]);
 
-  const selSet = useMemo(() => new Set(values), [values]);
-  const allOf  = (ms) => ms.length > 0 && ms.every(m => selSet.has(m));
-  const someOf = (ms) => ms.some(m => selSet.has(m));
-  const toggleFY    = (months) => { const next = new Set(selSet); if (allOf(months)) months.forEach(m => next.delete(m)); else months.forEach(m => next.add(m)); onChange([...next]); };
-  const toggleMonth = (ym)     => { const next = new Set(selSet); next.has(ym) ? next.delete(ym) : next.add(ym); onChange([...next]); };
+  const selected = values[0] || null;
 
-  const displayLabel = values.length === 0 ? "Latest month"
-    : values.length === 1 ? fmtMonthKey(values[0])
-    : `${values.length} months`;
+  /* on open, expand only the FY containing the current selection */
+  useEffect(() => {
+    if (open) setExpanded(new Set(selected ? [getFY(selected)] : []));
+  }, [open, selected]);
+
+  const toggleFY = (fy) => setExpanded(prev => {
+    const n = new Set(prev);
+    n.has(fy) ? n.delete(fy) : n.add(fy);
+    return n;
+  });
+
+  const pickMonth = (ym) => { onChange([ym]); setOpen(false); };
+
+  const displayLabel = selected ? fmtMonthKey(selected) : "Latest month";
 
   return (
     <div ref={ref} className="relative flex-1 min-w-0">
@@ -371,19 +372,20 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
       {open && (
         <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto" style={{ minWidth: "100%" }}>
           {fyTree.map(({ fy, months }) => {
-            const fyChk = allOf(months), fySome = someOf(months), fyExp = fySome || fyChk;
+            const isExp  = expanded.has(fy);
+            const hasSel = selected && months.includes(selected);
             return (
               <div key={fy} className="border-b border-gray-100 last:border-b-0">
-                <div className="flex items-center gap-2 hover:bg-gray-50" style={{ padding: "10px 12px" }}>
-                  <Chk checked={fyChk} partial={fySome} onClick={() => toggleFY(months)} />
-                  <span className="text-xs font-bold text-gray-800 cursor-pointer select-none" onClick={() => toggleFY(months)}>{getFYLabel(fy)}</span>
+                <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 select-none" style={{ padding: "10px 12px" }} onClick={() => toggleFY(fy)}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" className={"transition-transform flex-shrink-0 " + (isExp ? "rotate-90" : "")}><path d="M9 18l6-6-6-6"/></svg>
+                  <span className={"text-xs font-bold " + (hasSel ? "text-blue-700" : "text-gray-800")}>{getFYLabel(fy)}</span>
                 </div>
-                {fyExp && months.map(ym => {
-                  const chk = selSet.has(ym);
+                {isExp && months.map(ym => {
+                  const isSel = ym === selected;
                   return (
-                    <div key={ym} className="flex items-center gap-2 hover:bg-gray-50 border-t border-dashed border-gray-200" style={{ padding: "10px 12px 10px 28px" }} onClick={() => toggleMonth(ym)}>
-                      <Chk checked={chk} partial={false} onClick={(e) => { e.stopPropagation(); toggleMonth(ym); }} />
-                      <span className="text-xs font-semibold text-gray-700 select-none">{fmtMonthKey(ym)}</span>
+                    <div key={ym} onClick={() => pickMonth(ym)} className={"flex items-center gap-2 cursor-pointer border-t border-dashed border-gray-200 select-none " + (isSel ? "bg-blue-50" : "hover:bg-gray-50")} style={{ padding: "10px 12px 10px 30px" }}>
+                      <span className={"text-xs font-semibold " + (isSel ? "text-blue-700" : "text-gray-700")}>{fmtMonthKey(ym)}</span>
+                      {isSel && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="3" className="ml-auto flex-shrink-0"><path d="M20 6L9 17l-5-5"/></svg>}
                     </div>
                   );
                 })}
@@ -503,6 +505,7 @@ const UploadModal = ({ uploadState, handleUpload, hasData, onClose, fileRef }) =
           ref={fileRef}
           type="file"
           accept=".csv"
+          multiple
           className="hidden"
           onChange={e => { handleUpload(e.target.files); if (fileRef.current) fileRef.current.value = ""; }}
         />
@@ -660,7 +663,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       byPartner[pID].customers[cID][type] += val; byPartner[pID].customers[cID].total += val;
       if (prod) {
         const pb = byPartner[pID].customers[cID].productBreakdown;
-        if (!pb[prod]) pb[prod] = { upsell: 0, crosssell: 0, new: 0, total: 0, type };
+        if (!pb[prod]) pb[prod] = { upsell: 0, crosssell: 0, new: 0, total: 0 };
         pb[prod][type] += val; pb[prod].total += val;
       }
     }
@@ -877,7 +880,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                               <span/>
                               <span/>
                               {["upsell","crosssell","new"].map(t => (
-                                <span key={t} className="text-xs text-gray-600">{prd.type === t ? fmtVal(prd[t]) : <Dash/>}</span>
+                                <span key={t} className="text-xs text-gray-600">{prd[t] !== 0 ? fmtVal(prd[t]) : <Dash/>}</span>
                               ))}
                               <span className="text-xs font-medium text-gray-700">{fmtVal(prd.total)}</span>
                               <span className="text-right"><Dash/></span>
@@ -1006,76 +1009,93 @@ function App() {
   /* ── Upload handler ── */
   const handleUpload = useCallback(async (files) => {
     if (!files || !files.length) return;
-    const file = files[0];
-    console.log("[CloudRe] Upload started:", file.name, `(${(file.size / 1024).toFixed(1)} KB)`);
+    const fileList = [...files];
     setUploadState({ status: "uploading" });
     try {
       await new Promise(r => setTimeout(r, 40));
-      const raw = await parseCsv(file);
-      console.log("[CloudRe] Parsed rows:", raw.length, "· Detected headers:", Object.keys(raw[0] || {}).join(", "));
 
-      const { valid, message } = validateCsv(raw);
-      if (!valid) {
-        console.warn("[CloudRe] validation failed:", message, "· Expected columns:", REQUIRED_COLS.join(", "));
-        setUploadState({ status: "error", message: message || "Upload failed" });
-        return;
+      /* ── Phase 1: parse + validate ALL files (all-or-nothing) ── */
+      const parsed = [];
+      for (const file of fileList) {
+        console.log("[CloudRe] Upload started:", file.name, `(${(file.size / 1024).toFixed(1)} KB)`);
+        const raw = await parseCsv(file);
+        console.log("[CloudRe]", file.name, "— parsed rows:", raw.length, "· Detected headers:", Object.keys(raw[0] || {}).join(", "));
+        const { valid, message } = validateCsv(raw);
+        if (!valid) {
+          console.warn("[CloudRe]", file.name, "— validation failed:", message, "· Expected columns:", REQUIRED_COLS.join(", "));
+          console.warn("[CloudRe] All-or-nothing: nothing was imported");
+          setUploadState({ status: "error" });
+          return;
+        }
+        parsed.push({ name: file.name, raw });
       }
 
+      /* ── Phase 2: normalize + import ── */
       const isBlank = v => !v.trim() || ["na","n/a","#n/a","#na"].includes(v.trim().toLowerCase());
       const STRICT_COLS = REQUIRED_COLS.filter(c => c !== "amount");
-      const clean   = raw.filter(r => STRICT_COLS.every(c => !isBlank(r[c] || "")));
-      const skipped = raw.length - clean.length;
-      if (skipped > 0) {
-        const skippedRows = raw.filter(r => !STRICT_COLS.every(c => !isBlank(r[c] || "")));
-        console.warn("[CloudRe] Skipped", skipped, "row(s) — blank or invalid required fields:");
-        skippedRows.slice(0, 10).forEach((r, i) => {
-          const blankFields = REQUIRED_COLS.filter(c => isBlank(r[c] || ""));
-          console.warn(`  [Row ${i + 1}] Blank fields: ${blankFields.join(", ")} →`, JSON.stringify(r));
-        });
-        if (skipped > 10) console.warn(`  … and ${skipped - 10} more. First 10 shown above.`);
+      let batchRows = [];
+      let totalSkipped = 0;
+
+      for (const { name, raw } of parsed) {
+        const clean   = raw.filter(r => STRICT_COLS.every(c => !isBlank(r[c] || "")));
+        const skipped = raw.length - clean.length;
+        totalSkipped += skipped;
+        if (skipped > 0) {
+          const skippedRows = raw.filter(r => !STRICT_COLS.every(c => !isBlank(r[c] || "")));
+          console.warn("[CloudRe]", name, "— skipped", skipped, "row(s) — blank or invalid required fields:");
+          skippedRows.slice(0, 10).forEach((r, i) => {
+            const blankFields = STRICT_COLS.filter(c => isBlank(r[c] || ""));
+            console.warn(`  [Row ${i + 1}] Blank fields: ${blankFields.join(", ")} →`, JSON.stringify(r));
+          });
+          if (skipped > 10) console.warn(`  … and ${skipped - 10} more. First 10 shown above.`);
+        }
+
+        const normalized = clean.map(r => ({
+          "Date":          (r["InvoiceDate"]     || "").trim(),
+          "Customer Name": (r["EndCustomer"]      || "").trim(),
+          "Customer ID":   (r["custid"]           || "").trim(),
+          "Partner Name":  extractPartnerName(r["partnername"]),
+          "Partner ID":    extractPartnerID(r["partnername"]),
+          "Product":       (r["SubscriptionName"] || "").trim(),
+          "Value":         ((r["amount"]           || "").trim() || "0"),
+          "Country":       extractCountry(r["storeid"]),
+        }));
+        console.log("[CloudRe]", name, "— normalized sample row:", normalized[0]);
+
+        const uploadStamp = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+        const newRows = normalized.map((r, i) => ({
+          ...r,
+          _reportingMonth: getMonthKey(r["Date"]),
+          _id: uploadStamp + "-" + i,
+        })).filter(r => r._reportingMonth);
+
+        const unparsedDates = normalized.length - newRows.length;
+        if (unparsedDates > 0) console.warn("[CloudRe]", name, "— rows dropped, could not parse date value:", unparsedDates, "· Sample date values:", [...new Set(normalized.map(r => r["Date"]))].slice(0, 5));
+
+        if (!newRows.length) {
+          console.warn("[CloudRe]", name, "— no valid rows remaining after filtering. All-or-nothing: nothing was imported");
+          setUploadState({ status: "error" });
+          return;
+        }
+
+        const newMonths = [...new Set(newRows.map(r => r._reportingMonth))];
+        console.log("[CloudRe]", name, "— months detected:", newMonths.map(fmtMonthKey).join(", "));
+
+        /* within the batch, a later file replaces overlapping months from earlier files */
+        batchRows = [...batchRows.filter(r => !newMonths.includes(r._reportingMonth)), ...newRows];
       }
-
-      const normalized = clean.map(r => ({
-        "Date":          (r["InvoiceDate"]     || "").trim(),
-        "Customer Name": (r["EndCustomer"]      || "").trim(),
-        "Customer ID":   (r["custid"]           || "").trim(),
-        "Partner Name":  extractPartnerName(r["partnername"]),
-        "Partner ID":    extractPartnerID(r["partnername"]),
-        "Product":       (r["SubscriptionName"] || "").trim(),
-        "Value":         ((r["amount"]           || "").trim() || "0"),
-        "Country":       extractCountry(r["storeid"]),
-      }));
-      console.log("[CloudRe] Normalized sample row:", normalized[0]);
-
-      let idCounter = Date.now();
-      const newRows = normalized.map(r => ({
-        ...r,
-        _reportingMonth: getMonthKey(r["Date"]),
-        _id: String(idCounter++),
-      })).filter(r => r._reportingMonth);
-
-      const unparsedDates = normalized.length - newRows.length;
-      if (unparsedDates > 0) console.warn("[CloudRe] Rows dropped — could not parse date value:", unparsedDates, "· Sample date values:", [...new Set(normalized.map(r => r["Date"]))].slice(0, 5));
-
-      if (!newRows.length) {
-        console.warn("[CloudRe] No valid rows remaining after filtering. Check that the date column contains parseable date values");
-        setUploadState({ status: "error", message: "No valid rows found" });
-        return;
-      }
-
-      const newMonths = [...new Set(newRows.map(r => r._reportingMonth))];
-      console.log("[CloudRe] Months detected:", newMonths.map(fmtMonthKey).join(", "));
 
       await new Promise(r => setTimeout(r, 80));
 
-      setAllRows(prev => [...prev.filter(r => !newMonths.includes(r._reportingMonth)), ...newRows]);
+      const batchMonths = [...new Set(batchRows.map(r => r._reportingMonth))];
+      setAllRows(prev => [...prev.filter(r => !batchMonths.includes(r._reportingMonth)), ...batchRows]);
 
-      console.log("[CloudRe] Upload complete —", newRows.length, "rows ·", newMonths.length, "month(s)");
-      setUploadState({ status: "success", imported: newRows.length, skipped });
+      console.log("[CloudRe] Upload complete —", batchRows.length, "rows ·", batchMonths.length, "month(s) ·", fileList.length, "file(s)");
+      setUploadState({ status: "success", imported: batchRows.length, skipped: totalSkipped });
 
     } catch (err) {
       console.error("[CloudRe] Upload error:", err);
-      setUploadState({ status: "error", message: "Upload failed" });
+      setUploadState({ status: "error" });
     }
   }, []);
 
@@ -1131,11 +1151,11 @@ function App() {
           <div className="flex items-center gap-3">
             <button onClick={() => setUploadModalOpen(true)}
               className="px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap h-[32px] border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100">
-              Upload data
+              Upload Data
             </button>
             <button onClick={clearAll} disabled={!hasData}
               className={"px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap h-[32px] " + (!hasData ? "text-gray-300 bg-gray-100 cursor-not-allowed" : "text-red-600 bg-red-50 hover:bg-red-100")}>
-              Clear all data
+              Clear All Data
             </button>
           </div>
         </div>
