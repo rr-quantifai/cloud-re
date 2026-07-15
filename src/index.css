@@ -1,3 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes dotPulse { 0%,80%,100% { opacity:.3; transform:scale(.8); } 40% { opacity:1; transform:scale(1); } }
+@keyframes _spin    { to { transform:rotate(360deg); } }
+@keyframes _pop     { 0% { transform:scale(.7); opacity:0; } 60% { transform:scale(1.15); } 100% { transform:scale(1); opacity:1; } }

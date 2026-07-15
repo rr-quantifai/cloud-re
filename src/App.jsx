@@ -87,7 +87,6 @@ const REQUIRED_COLS = ["custid", "EndCustomer", "InvoiceDate", "amount", "Subscr
 const extractPartnerName = (v) => { const s = (v||"").trim(); const i = s.indexOf("~"); return i !== -1 ? s.slice(i+1).trim() : s; };
 const extractPartnerID   = (v) => { const s = (v||"").trim(); const i = s.indexOf("~"); return i !== -1 ? s.slice(0,i).trim() : ""; };
 const extractCountry     = (v) => { const s = (v||"").trim(); const i = s.indexOf("-"); return i !== -1 ? s.slice(0,i).trim() : s; };
-const TAB = Object.freeze({ TRACKER: "tracker", UPLOAD: "upload" });
 const PAGE_SIZE = 25;
 const MIN_DESKTOP = 1024;
 
@@ -171,7 +170,6 @@ const buildTypeMap = (allRows, sortedMonths) => {
 const Dots = () => (
   <span className="inline-flex items-center gap-1">
     {[0,1,2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-gray-300" style={{animation:"dotPulse 1.2s infinite",animationDelay:i*0.2+"s"}}/>)}
-    <style>{`@keyframes dotPulse{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}`}</style>
   </span>
 );
 
@@ -183,25 +181,6 @@ const Chk = ({ checked, partial, onClick }) => (
   <div onClick={onClick} className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition " + (checked ? "border-blue-600" : partial ? "border-blue-400" : "border-gray-300 hover:border-gray-400")}>
     {checked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="4"><path d="M20 6L9 17l-5-5"/></svg>}
     {partial && !checked && <div className="w-2 h-0.5 bg-blue-400 rounded-sm"/>}
-  </div>
-);
-
-const TabSwitch = ({ items, active, onChange }) => (
-  <div className="inline-flex gap-1 bg-gray-100 rounded-lg p-1">
-    {items.map(([k, l, disabled]) => (
-      <button
-        key={k}
-        onClick={() => !disabled && onChange(k)}
-        disabled={!!disabled}
-        title={disabled ? "Upload data to enable this view" : undefined}
-        className={"px-4 py-2 text-sm font-medium rounded-md transition whitespace-nowrap " +
-          (disabled
-            ? "text-gray-300 cursor-not-allowed"
-            : active === k
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700")}
-      >{l}</button>
-    ))}
   </div>
 );
 
@@ -284,99 +263,75 @@ const MultiSel = ({ values, onChange, options, placeholder, searchable = false }
   );
 };
 
-/* ═══════════════════════════════════════════════════════════════════
-   UPLOAD BAR
-   ═══════════════════════════════════════════════════════════════════ */
-const UploadBar = ({ uploadState, handleUpload, fileRef }) => {
-  const st = uploadState?.status;
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-0">
-      <label className={"flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border flex-shrink-0 cursor-pointer transition " + (st === "uploading" ? "border-blue-200 bg-blue-50 text-blue-300 cursor-not-allowed" : "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100")}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-        {st === "uploading" ? "Uploading…" : "Upload CSV"}
-        {st !== "uploading" && <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { handleUpload(e.target.files); if (fileRef.current) fileRef.current.value = ""; }}/>}
-      </label>
-
-      <span className="text-gray-200 mx-4 select-none text-base">|</span>
-
-      <span className={"text-xs font-medium flex-shrink-0 " + (st === "success" ? "text-emerald-600" : "text-gray-300")}>
-        Successful
-      </span>
-
-      <span className="text-gray-200 mx-4 select-none text-base">|</span>
-
-      <span className={"text-xs font-medium flex-shrink-0 " + (st === "error" ? "text-red-500" : "text-gray-300")}>
-        Failed
-      </span>
-
-      <span className="text-gray-200 mx-4 select-none text-base">|</span>
-
-      <span className={"text-xs flex-1 min-w-0 truncate " + (st === "success" ? "text-gray-500" : st === "error" ? "text-gray-500" : "text-gray-300 italic")}>
-        {!st && "Upload status is displayed here"}
-        {st === "uploading" && "Processing…"}
-        {st === "success" && (uploadState.message || "")}
-        {st === "error" && "See console for details"}
-      </span>
-    </div>
-  );
+const KPI_ICONS = {
+  upsell:    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
+  crosssell: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M17 4l4 4-4 4M7 20l-4-4 4-4M3 8h18M3 16h18"/></svg>,
+  new:       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M12 3l1.8 5.4L19 9l-5.2 4 2 5.8L12 15.6 8.2 18.8l2-5.8L5 9l5.2-.6L12 3z"/></svg>,
+  recapture: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2"><path d="M20 11A8.1 8.1 0 004.5 9M4 5v4h4M4 13a8.1 8.1 0 0015.5 2M20 17v-4h-4"/></svg>,
+  total:     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><path d="M18 16v2a1 1 0 01-1 1H7l6-7-6-7h10a1 1 0 011 1v2"/></svg>,
 };
+
+const KPI_CONFIG = [
+  { key: "upsell",    label: "Upsell",     iconEl: KPI_ICONS.upsell,    border: "#10b981", iconBg: "#f0fdf4", pill: { bg: "#f0fdf4", text: "#166534", border: "#bbf7d0" } },
+  { key: "crosssell", label: "Cross-sell", iconEl: KPI_ICONS.crosssell, border: "#3b82f6", iconBg: "#eff6ff", pill: { bg: "#eff6ff", text: "#1e40af", border: "#bfdbfe" } },
+  { key: "new",       label: "New",        iconEl: KPI_ICONS.new,       border: "#7c3aed", iconBg: "#f5f3ff", pill: { bg: "#f5f3ff", text: "#4c1d95", border: "#ddd6fe" } },
+  { key: "recapture", label: "Recapture",  iconEl: KPI_ICONS.recapture, border: "#d97706", iconBg: "#fffbeb", pill: null },
+  { key: "total",     label: "Total",      iconEl: KPI_ICONS.total,     border: "#6b7280", iconBg: "#f9fafb", pill: null },
+];
 
 /* ═══════════════════════════════════════════════════════════════════
    KPI CARDS
    ═══════════════════════════════════════════════════════════════════ */
+const ChangeChip = ({ curr, prior, isPct = false }) => {
+  const neutral = "inline-flex text-[10px] font-medium px-1.5 py-px rounded-full flex-shrink-0 border bg-slate-100 text-slate-400 border-slate-200";
+  if (prior == null || (!isPct && prior === 0)) return <span className={neutral}>—</span>;
+  const delta = isPct ? curr - prior : ((curr - prior) / prior) * 100;
+  if (Math.abs(delta) < 0.05) return <span className={neutral}>—</span>;
+  const pos   = delta >= 0;
+  const label = isPct ? `${Math.abs(delta).toFixed(1)}pp` : `${Math.abs(delta).toFixed(1)}%`;
+  return (
+    <span className={"inline-flex text-[10px] font-medium px-1.5 py-px rounded-full flex-shrink-0 border " + (pos ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-800 border-red-200")}>
+      {pos ? "↑" : "↓"} {label}
+    </span>
+  );
+};
+
 const KPICards = ({ totals, priorTotals }) => {
-  const fmtVal  = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
-  const fmtPct  = (v) => (v || 0).toFixed(1) + "%";
-  const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
+  const total = Math.max(totals.total, 1);
   const currRate  = recapRate(totals);
   const priorRate = priorTotals ? recapRate(priorTotals) : null;
-  const total     = Math.max(totals.total, 1);
 
-  const YoY = ({ curr, prior, isPct }) => {
-    if (prior == null) return null;
-    if (!isPct && prior === 0) return null;
-    const delta = isPct ? curr - prior : ((curr - prior) / prior) * 100;
-    if (Math.abs(delta) < 0.05) return null;
-    const pos   = delta >= 0;
-    const label = isPct ? `${Math.abs(delta).toFixed(1)}pp` : `${Math.abs(delta).toFixed(1)}%`;
-    return <><span className="text-gray-200 mx-1.5">|</span><span className={"text-xs font-medium " + (pos ? "text-emerald-600" : "text-red-500")}>{pos ? "↑" : "↓"} {label}</span></>;
+  const dynamic = {
+    upsell:    { pct: Math.round((totals.upsell    / total) * 100), val: fmtVal(totals.upsell),    curr: totals.upsell,    prior: priorTotals?.upsell    ?? null, isPct: false },
+    crosssell: { pct: Math.round((totals.crosssell / total) * 100), val: fmtVal(totals.crosssell), curr: totals.crosssell, prior: priorTotals?.crosssell ?? null, isPct: false },
+    new:       { pct: Math.round((totals.new       / total) * 100), val: fmtVal(totals.new),       curr: totals.new,       prior: priorTotals?.new       ?? null, isPct: false },
+    recapture: { pct: null,                     val: fmtPct(currRate),         curr: currRate,         prior: priorRate,                      isPct: true  },
+    total:     { pct: null,                     val: fmtVal(totals.total),     curr: totals.total,     prior: priorTotals?.total     ?? null, isPct: false },
   };
-
-  const ROWS = [
-    { label: "Upsell",     val: totals.upsell,    prior: priorTotals?.upsell,    pct: (totals.upsell    / total) * 100, color: "#10b981" },
-    { label: "Cross-sell", val: totals.crosssell, prior: priorTotals?.crosssell, pct: (totals.crosssell / total) * 100, color: "#3b82f6" },
-    { label: "New",        val: totals.new,        prior: priorTotals?.new,       pct: (totals.new       / total) * 100, color: "#7c3aed" },
-  ];
+  const CARDS = KPI_CONFIG.map(cfg => ({ ...cfg, ...dynamic[cfg.key] }));
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
-      {ROWS.map(({ label, val, prior, pct, color }) => (
-        <div key={label} className="grid items-center px-5 py-2.5 border-b border-gray-100" style={{gridTemplateColumns:"100px 1fr 160px", gap:"16px"}}>
-          <span className="text-xs font-medium text-gray-500">{label}</span>
-          <div className="h-[7px] bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all" style={{width: pct + "%", background: color}}/>
+    <div className="grid mb-6" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: "8px" }}>
+      {CARDS.map(({ key, label, iconEl, border, iconBg, pill, pct, val, curr, prior, isPct }) => (
+        <div key={key} className="bg-white rounded-xl border border-gray-200" style={{ borderLeft: `3px solid ${border}`, padding: "13px 13px 12px" }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-[22px] h-[22px] rounded-md flex items-center justify-center flex-shrink-0" style={{ background: iconBg }}>
+                {iconEl}
+              </div>
+              <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{label}</span>
+            </div>
+            {pill && pct != null && (
+              <span className="text-[10px] font-medium px-1.5 py-px rounded-full border flex-shrink-0 ml-1" style={{ background: pill.bg, color: pill.text, borderColor: pill.border }}>{pct}%</span>
+            )}
           </div>
-          <div className="flex items-center justify-end text-xs font-medium text-gray-900">
-            {fmtVal(val)}<YoY curr={val} prior={prior}/>
+          <div className="text-lg font-medium text-gray-900 tracking-tight mb-2.5">{val}</div>
+          <div className="flex items-center gap-1.5">
+            <ChangeChip curr={curr} prior={prior} isPct={isPct}/>
+            {prior != null && <span className="text-[10px] text-gray-400">vs prior year</span>}
           </div>
         </div>
       ))}
-      <div className="grid items-center px-5 py-2.5 border-b border-gray-200 border-t border-gray-200" style={{gridTemplateColumns:"100px 1fr 160px", gap:"16px"}}>
-        <span className="text-xs font-medium text-gray-500">Total</span>
-        <div/>
-        <div className="flex items-center justify-end text-xs font-medium text-gray-500">
-          {fmtVal(totals.total)}<YoY curr={totals.total} prior={priorTotals?.total}/>
-        </div>
-      </div>
-      <div className="grid items-center px-5 py-2.5" style={{gridTemplateColumns:"100px 1fr 160px", gap:"16px"}}>
-        <span className="text-xs font-medium text-gray-500">Recapture</span>
-        <div className="h-[7px] bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all" style={{width: currRate + "%", background: "#d97706"}}/>
-        </div>
-        <div className="flex items-center justify-end text-xs font-medium text-gray-900">
-          {fmtPct(currRate)}<YoY curr={currRate} prior={priorRate} isPct/>
-        </div>
-      </div>
     </div>
   );
 };
@@ -444,8 +399,8 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
 const fmtVal    = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 const fmtPct    = (v) => (v || 0).toFixed(1) + "%";
 const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
-const GRID      = "minmax(150px, 2fr) 0.7fr 0.8fr 1fr 1fr 0.8fr 1fr 1.1fr";
-const GAP       = { gap: "8px" };
+const GRID      = "minmax(180px, 2fr) 1fr 1fr 1fr 1fr 1fr 1fr 90px";
+const GAP       = { gap: "16px" };
 
 const SortTh = ({ col, label, right = false, sortCol, onSort }) => (
   <span className={"cursor-pointer select-none hover:text-gray-700 transition text-xs uppercase tracking-wider font-medium whitespace-nowrap " + (right ? "block text-right" : "")}
@@ -457,11 +412,119 @@ const CntBadge = ({ label }) => <span className="inline-block px-1.5 py-px text-
 const Dash     = ()          => <span className="text-gray-200 text-xs">—</span>;
 
 /* ═══════════════════════════════════════════════════════════════════
+   UPLOAD MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+const UploadModal = ({ uploadState, handleUpload, hasData, onClose, fileRef }) => {
+  const st = uploadState?.status;
+  const [drag, setDrag] = useState(false);
+
+  useEffect(() => {
+    if (st === "success") {
+      const t = setTimeout(onClose, 2000);
+      return () => clearTimeout(t);
+    }
+  }, [st, onClose]);
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault();
+    setDrag(false);
+    if (st === "uploading") return;
+    const files = e.dataTransfer.files;
+    if (files?.length) handleUpload(files);
+  }, [handleUpload, st]);
+
+  const onDragOver = useCallback((e) => {
+    e.preventDefault();
+    if (st !== "uploading") setDrag(true);
+  }, [st]);
+
+  const onDragLeave = useCallback((e) => {
+    if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) setDrag(false);
+  }, []);
+
+  const imported = uploadState?.imported ?? 0;
+  const skipped  = uploadState?.skipped  ?? 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: "#0f0f0f" }}
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+    >
+      <div className="bg-white rounded-2xl relative" style={{ width: "340px", padding: "40px 32px 32px" }}>
+
+        {hasData && st !== "uploading" && (
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute top-3.5 right-3.5 w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        )}
+
+        <div className="flex flex-col items-center text-center gap-4">
+
+          {!st && (
+            <div className={"w-14 h-14 rounded-2xl flex items-center justify-center transition-colors " + (drag ? "bg-blue-100" : "bg-blue-50")}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={drag ? "#1d4ed8" : "#2563eb"} strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            </div>
+          )}
+          {st === "uploading" && (
+            <div className="w-14 h-14 rounded-full border-[3px] border-gray-200 border-t-blue-600" style={{ animation: "_spin .9s linear infinite" }}/>
+          )}
+          {st === "success" && (
+            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center" style={{ animation: "_pop .3s cubic-bezier(.34,1.56,.64,1) forwards" }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+          )}
+          {st === "error" && (
+            <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center" style={{ animation: "_pop .3s cubic-bezier(.34,1.56,.64,1) forwards" }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </div>
+          )}
+
+          <div>
+            <p className="text-sm font-semibold text-gray-900 mb-1.5">
+              {!st ? "Upload CSV" : st === "uploading" ? "Uploading CSV" : st === "success" ? "Upload complete" : "Upload failed"}
+            </p>
+            <p className="text-xs text-gray-400">
+              {!st ? "Drop or click to browse" : st === "uploading" ? "Do not close the modal" : st === "success" ? `${imported.toLocaleString()} rows imported` : "See console for details"}
+            </p>
+            {st === "success" && skipped > 0 && (
+              <p className="text-xs text-amber-500 mt-1">{skipped.toLocaleString()} rows skipped</p>
+            )}
+          </div>
+        </div>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={e => { handleUpload(e.target.files); if (fileRef.current) fileRef.current.value = ""; }}
+        />
+
+        <button
+          onClick={() => { if (!st || st === "error") fileRef.current?.click(); }}
+          disabled={st === "uploading" || st === "success"}
+          className={"w-full h-10 rounded-lg text-sm font-medium mt-7 transition-opacity " + (st === "uploading" || st === "success" ? "bg-blue-600 text-white opacity-35 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer")}
+        >
+          Upload data
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════════
    TRACKER VIEW
    ═══════════════════════════════════════════════════════════════════ */
 const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const latestMonth = sortedMonths.length ? sortedMonths[sortedMonths.length - 1] : null;
-  const [selMonths, setSelMonths]       = useState([]);
+  const [selMonths, setSelMonths]       = useState(() => latestMonth ? [latestMonth] : []);
   const [selPartner, setSelPartner]     = useState([]);
   const [selCustomer, setSelCustomer]   = useState([]);
   const [selProducts, setSelProducts]   = useState([]);
@@ -471,6 +534,14 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [sortCol, setSortCol]           = useState(null);
   const [sortDir, setSortDir]           = useState("desc");
   const [partnerPage, setPartnerPage]   = useState(0);
+
+  const prevLatestRef = useRef(latestMonth);
+  useEffect(() => {
+    if (latestMonth && latestMonth !== prevLatestRef.current) {
+      prevLatestRef.current = latestMonth;
+      setSelMonths([latestMonth]);
+    }
+  }, [latestMonth]);
 
   const effectiveMonths = useMemo(
     () => selMonths.length ? selMonths : (latestMonth ? [latestMonth] : []),
@@ -484,7 +555,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     [effectiveMonths, sortedMonths]
   );
 
-  const parseValue = useCallback((v) => parseFloat((v || "").toString().replace(/[^0-9.\-]/g, "")) || 0, []);
+  const parseValue = useCallback((v) => parseFloat((v || "").toString().replace(/[^0-9.-]/g, "")) || 0, []);
 
   const monthRows = useMemo(() =>
     allRows.filter(r => effectiveMonths.includes(r._reportingMonth)),
@@ -560,7 +631,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   }, [monthRows, validForCountry]);
 
   /* ── Aggregate ── */
-  const aggregate = useCallback((months, partnerFilter, customerFilter, prodFilter, countryFilter) => {
+  const aggregate = useCallback((months, partnerFilter, customerFilter, prodFilter, countryFilter, totalsOnly = false) => {
     const empty = { byPartner: {}, totals: { upsell: 0, crosssell: 0, new: 0, total: 0 } };
     if (!months || !months.length) return empty;
     const rows = allRows.filter(r => {
@@ -573,16 +644,17 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     });
     const byPartner = {}, totals = { upsell: 0, crosssell: 0, new: 0, total: 0 };
     for (const row of rows) {
+      const type = typeMap[row._id] || "new";
+      const val  = parseValue(row["Value"]);
+      totals[type] += val; totals.total += val;
+      if (totalsOnly) continue;
       const pID  = (row["Partner ID"]    || "").trim() || "unknown";
       const pNm  = (row["Partner Name"]  || "").trim() || "Unknown Partner";
       const cID  = (row["Customer ID"]   || "").trim() || "unknown";
       const cNm  = (row["Customer Name"] || "").trim() || "Unknown Customer";
-      const type = typeMap[row._id] || "new";
-      const val  = parseValue(row["Value"]);
       const prod = (row["Product"] || "").trim();
       if (!byPartner[pID]) byPartner[pID] = { name: pNm, upsell: 0, crosssell: 0, new: 0, total: 0, customers: {} };
       byPartner[pID][type] += val; byPartner[pID].total += val;
-      totals[type] += val; totals.total += val;
       if (!byPartner[pID].customers[cID])
         byPartner[pID].customers[cID] = { name: cNm, upsell: 0, crosssell: 0, new: 0, total: 0, productBreakdown: {} };
       byPartner[pID].customers[cID][type] += val; byPartner[pID].customers[cID].total += val;
@@ -600,7 +672,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     [aggregate, effectiveMonths, selPartner, selCustomer, selProducts, selCountry]
   );
   const { totals: priorTotals } = useMemo(
-    () => priorYearMonths.length ? aggregate(priorYearMonths, selPartner, selCustomer, selProducts, selCountry) : { totals: null },
+    () => priorYearMonths.length ? aggregate(priorYearMonths, selPartner, selCustomer, selProducts, selCountry, true) : { totals: null },
     [aggregate, priorYearMonths, selPartner, selCustomer, selProducts, selCountry]
   );
 
@@ -619,14 +691,14 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     return m;
   }, [allRows]);
 
-  const toggleSort = (col) => {
+  const toggleSort = useCallback((col) => {
     if (sortCol === col) { if (sortDir === "desc") setSortDir("asc"); else { setSortCol(null); setSortDir("desc"); } }
     else { setSortCol(col); setSortDir("desc"); }
     setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0);
-  };
+  }, [sortCol, sortDir]);
 
-  const toggleExpand     = (pID) => setExpanded(prev => { const n = new Set(prev); n.has(pID) ? n.delete(pID) : n.add(pID); return n; });
-  const toggleExpandCust = (pID, cID) => { const k = pID+"|||"+cID; setExpandedCust(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; }); };
+  const toggleExpand     = useCallback((pID) => setExpanded(prev => { const n = new Set(prev); n.has(pID) ? n.delete(pID) : n.add(pID); return n; }), []);
+  const toggleExpandCust = useCallback((pID, cID) => { const k = pID+"|||"+cID; setExpandedCust(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; }); }, []);
 
   const partnerNames = useMemo(() => {
     const ids = Object.keys(currentPartners);
@@ -652,13 +724,13 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const pagedPartnerNames = partnerNames.slice(safePartnerPage * PAGE_SIZE, (safePartnerPage + 1) * PAGE_SIZE);
   const uniqueCustomerCount = useMemo(() => Object.values(currentPartners).reduce((s, pd) => s + Object.keys(pd.customers).length, 0), [currentPartners]);
 
-  const hasFilters = selMonths.length > 0 || selPartner.length > 0 || selCustomer.length > 0 || selProducts.length > 0 || selCountry.length > 0 || sortCol !== null;
+  const hasFilters = (selMonths.length !== 1 || selMonths[0] !== latestMonth) || selPartner.length > 0 || selCustomer.length > 0 || selProducts.length > 0 || selCountry.length > 0 || sortCol !== null;
 
-  const resetAll = () => {
-    setSelMonths([]); setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
+  const resetAll = useCallback(() => {
+    setSelMonths(latestMonth ? [latestMonth] : []); setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
     setSortCol(null); setSortDir("desc");
     setExpanded(new Set()); setExpandedCust(new Set()); setPartnerPage(0);
-  };
+  }, [latestMonth]);
 
   return (
     <div>
@@ -689,6 +761,8 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
             {/* Meta row */}
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span>{allRows.length.toLocaleString()} rows imported</span>
+                <span className="text-gray-300 text-sm select-none">|</span>
                 <span>{partnerNames.length.toLocaleString()} unique partner{partnerNames.length !== 1 ? "s" : ""}</span>
                 <span className="text-gray-300 text-sm select-none">|</span>
                 <span>{uniqueCustomerCount.toLocaleString()} unique customer{uniqueCustomerCount !== 1 ? "s" : ""}</span>
@@ -876,10 +950,10 @@ class ErrorBoundary extends React.Component {
    MAIN APP
    ═══════════════════════════════════════════════════════════════════ */
 function App() {
-  const [allRows, setAllRows]         = useState([]);
-  const [dataLoaded, setDataLoaded]   = useState(false);
-  const [tab, setTab]                 = useState(TAB.UPLOAD);
-  const [uploadState, setUploadState] = useState(null);
+  const [allRows, setAllRows]                 = useState([]);
+  const [dataLoaded, setDataLoaded]           = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadState, setUploadState]         = useState(null);
   const fileRef = useRef(null);
 
   const [isDesktop, setIsDesktop] = useState(() => typeof window !== "undefined" ? window.innerWidth >= MIN_DESKTOP : true);
@@ -921,15 +995,6 @@ function App() {
     return () => clearTimeout(t);
   }, [allRows, dataLoaded]);
 
-  /* ── Auto-clear upload status on next click ── */
-  useEffect(() => {
-    if (uploadState?.status === "success" || uploadState?.status === "error") {
-      const h = () => { setUploadState(null); };
-      const t = setTimeout(() => window.addEventListener("click", h, { once: true }), 300);
-      return () => { clearTimeout(t); window.removeEventListener("click", h); };
-    }
-  }, [uploadState]);
-
   /* ── Derived ── */
   const sortedMonths = useMemo(() =>
     [...new Set(allRows.map(r => r._reportingMonth).filter(Boolean))].sort(),
@@ -948,7 +1013,6 @@ function App() {
       await new Promise(r => setTimeout(r, 40));
       const raw = await parseCsv(file);
       console.log("[CloudRe] Parsed rows:", raw.length, "· Detected headers:", Object.keys(raw[0] || {}).join(", "));
-      setUploadState({ status: "uploading" });
 
       const { valid, message } = validateCsv(raw);
       if (!valid) {
@@ -1002,14 +1066,12 @@ function App() {
       const newMonths = [...new Set(newRows.map(r => r._reportingMonth))];
       console.log("[CloudRe] Months detected:", newMonths.map(fmtMonthKey).join(", "));
 
-      setUploadState({ status: "uploading" });
       await new Promise(r => setTimeout(r, 80));
 
       setAllRows(prev => [...prev.filter(r => !newMonths.includes(r._reportingMonth)), ...newRows]);
 
-      const skippedNote = skipped > 0 ? ` · ${skipped} row${skipped !== 1 ? "s" : ""} skipped · See console for a breakdown of skipped rows` : "";
       console.log("[CloudRe] Upload complete —", newRows.length, "rows ·", newMonths.length, "month(s)");
-      setUploadState({ status: "success", message: `${newRows.length.toLocaleString()} rows created${skippedNote}` });
+      setUploadState({ status: "success", imported: newRows.length, skipped });
 
     } catch (err) {
       console.error("[CloudRe] Upload error:", err);
@@ -1025,11 +1087,16 @@ function App() {
     await psDel("rows_idx");
   }, []);
 
+  const closeModal = useCallback(() => {
+    setUploadModalOpen(false);
+    setUploadState(null);
+  }, []);
+
   const hasData = allRows.length > 0;
 
   useEffect(() => {
-    if (!hasData && tab !== TAB.UPLOAD) setTab(TAB.UPLOAD);
-  }, [hasData]);
+    if (dataLoaded && !hasData) setUploadModalOpen(true);
+  }, [dataLoaded, hasData]);
 
   /* ── Guard: desktop only ── */
   if (!isDesktop) return (
@@ -1053,7 +1120,7 @@ function App() {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-600 to-violet-700 flex items-center justify-center flex-shrink-0">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 4h16v16H4z" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/>
+                <rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/>
               </svg>
             </div>
             <div>
@@ -1062,9 +1129,13 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={() => setUploadModalOpen(true)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap h-[32px] border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100">
+              Upload data
+            </button>
             <button onClick={clearAll} disabled={!hasData}
               className={"px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap h-[32px] " + (!hasData ? "text-gray-300 bg-gray-100 cursor-not-allowed" : "text-red-600 bg-red-50 hover:bg-red-100")}>
-              Clear All Data
+              Clear all data
             </button>
           </div>
         </div>
@@ -1072,23 +1143,18 @@ function App() {
 
       {/* ── Content ── */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="mb-6">
-          <TabSwitch
-            items={[
-              [TAB.UPLOAD,  "Data Upload", false   ],
-              [TAB.TRACKER, "Tracker",     !hasData],
-            ]}
-            active={tab}
-            onChange={setTab}
-          />
-        </div>
-
-        {tab === TAB.UPLOAD && (
-          <UploadBar uploadState={uploadState} handleUpload={handleUpload} fileRef={fileRef}/>
-        )}
-
-        {tab === TAB.TRACKER && hasData && <TrackerView allRows={allRows} sortedMonths={sortedMonths} typeMap={typeMap}/>}
+        {hasData && <TrackerView allRows={allRows} sortedMonths={sortedMonths} typeMap={typeMap}/>}
       </div>
+
+      {uploadModalOpen && (
+        <UploadModal
+          uploadState={uploadState}
+          handleUpload={handleUpload}
+          hasData={hasData}
+          onClose={closeModal}
+          fileRef={fileRef}
+        />
+      )}
     </div>
   );
 }
