@@ -276,9 +276,9 @@ const KPI_ICONS = {
 };
 
 const KPI_CONFIG = [
+  { key: "new",       label: "New",        iconEl: KPI_ICONS.new,       border: "#7c3aed", iconBg: "#f5f3ff", pill: { bg: "#f5f3ff", text: "#4c1d95", border: "#ddd6fe" } },
   { key: "upsell",    label: "Upsell",     iconEl: KPI_ICONS.upsell,    border: "#10b981", iconBg: "#f0fdf4", pill: { bg: "#f0fdf4", text: "#166534", border: "#bbf7d0" } },
   { key: "crosssell", label: "Cross-sell", iconEl: KPI_ICONS.crosssell, border: "#3b82f6", iconBg: "#eff6ff", pill: { bg: "#eff6ff", text: "#1e40af", border: "#bfdbfe" } },
-  { key: "new",       label: "New",        iconEl: KPI_ICONS.new,       border: "#7c3aed", iconBg: "#f5f3ff", pill: { bg: "#f5f3ff", text: "#4c1d95", border: "#ddd6fe" } },
   { key: "recapture", label: "Recapture",  iconEl: KPI_ICONS.recapture, border: "#d97706", iconBg: "#fffbeb", pill: null },
   { key: "total",     label: "Total",      iconEl: KPI_ICONS.total,     border: "#6b7280", iconBg: "#f9fafb", pill: null },
 ];
@@ -342,7 +342,7 @@ const KPICards = ({ totals, priorTotals }) => {
 
 const getFQ = (ym) => { const m = Number(ym.split("-")[1]); return m >= 4 ? Math.ceil((m - 3) / 3) : 4; };
 
-const FYMonthFilter = ({ values, onChange, allMonths }) => {
+const FYMonthFilter = ({ values, onChange, allMonths, validMonths }) => {
   const [open, setOpen]           = useState(false);
   const [expFY, setExpFY]         = useState(() => new Set());
   const [expQ, setExpQ]           = useState(() => new Set());
@@ -370,13 +370,21 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
   const allOf  = (ms) => ms.length > 0 && ms.every(m => selSet.has(m));
   const someOf = (ms) => ms.some(m => selSet.has(m));
 
+  const canPick  = (ym) => !validMonths || validMonths.has(ym) || selSet.has(ym);
+  const pickable = (ms) => ms.filter(canPick);
+
   const toggleGroup = (months) => {
+    const ms = pickable(months);
+    if (!ms.length) return;
     const next = new Set(selSet);
-    if (allOf(months)) months.forEach(m => next.delete(m));
-    else months.forEach(m => next.add(m));
+    if (allOf(ms)) ms.forEach(m => next.delete(m));
+    else ms.forEach(m => next.add(m));
     onChange([...next]);
   };
+
   const toggleMonth = (ym) => {
+    if (!canPick(ym)) return;                          // no data for current filters
+    if (selSet.has(ym) && selSet.size === 1) return;   // last selected month is locked
     const next = new Set(selSet);
     next.has(ym) ? next.delete(ym) : next.add(ym);
     onChange([...next]);
@@ -409,28 +417,35 @@ const FYMonthFilter = ({ values, onChange, allMonths }) => {
         <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto" style={{ minWidth: "100%" }}>
           {fyTree.map(({ fy, quarters }) => {
             const fyMonths = quarters.flatMap(q => q.months);
+            const fyPick   = pickable(fyMonths);
             const fyExp    = expFY.has(fy);
             return (
               <div key={fy} className="border-b border-gray-100 last:border-b-0">
                 <div className="flex items-center gap-2 hover:bg-gray-50 select-none" style={{ padding: "10px 12px" }}>
                   <span onClick={() => toggleExp(setExpFY, fy)} className="cursor-pointer flex items-center"><Chevron exp={fyExp}/></span>
-                  <Chk checked={allOf(fyMonths)} partial={someOf(fyMonths)} onClick={() => toggleGroup(fyMonths)} />
+                  <Chk checked={allOf(fyPick)} partial={someOf(fyMonths)} onClick={() => toggleGroup(fyMonths)} />
                   <span className="text-xs font-bold text-gray-800 cursor-pointer" onClick={() => toggleExp(setExpFY, fy)}>{getFYLabel(fy)}</span>
                 </div>
                 {fyExp && quarters.map(({ q, months }) => {
-                  const qKey = fy + "-Q" + q;
-                  const qExp = expQ.has(qKey);
+                  const qKey  = fy + "-Q" + q;
+                  const qPick = pickable(months);
+                  const qExp  = expQ.has(qKey);
                   return (
                     <React.Fragment key={qKey}>
                       <div className="flex items-center gap-2 hover:bg-gray-50 border-t border-dashed border-gray-200 select-none" style={{ padding: "10px 12px 10px 28px" }}>
                         <span onClick={() => toggleExp(setExpQ, qKey)} className="cursor-pointer flex items-center"><Chevron exp={qExp}/></span>
-                        <Chk checked={allOf(months)} partial={someOf(months)} onClick={() => toggleGroup(months)} />
+                        <Chk checked={allOf(qPick)} partial={someOf(months)} onClick={() => toggleGroup(months)} />
                         <span className="text-xs font-semibold text-gray-700 cursor-pointer" onClick={() => toggleExp(setExpQ, qKey)}>{`Q${q} ${getFYLabel(fy)}`}</span>
                       </div>
                       {qExp && months.map(ym => {
-                        const chk = selSet.has(ym);
+                        const chk    = selSet.has(ym);
+                        const locked = chk && selSet.size === 1;
+                        const off    = !canPick(ym);
                         return (
-                          <div key={ym} onClick={() => toggleMonth(ym)} className="flex items-center gap-2 hover:bg-gray-50 border-t border-dotted border-gray-200 cursor-pointer select-none" style={{ padding: "10px 12px 10px 44px" }}>
+                          <div key={ym} onClick={() => toggleMonth(ym)}
+                            className={"flex items-center gap-2 border-t border-dotted border-gray-200 select-none " + (off ? "opacity-35 cursor-not-allowed" : locked ? "cursor-default" : "hover:bg-gray-50 cursor-pointer")}
+                            title={off ? "No data for current filters" : locked ? "At least one month must stay selected" : undefined}
+                            style={{ padding: "10px 12px 10px 44px" }}>
                             <span className="w-[11px] flex-shrink-0"/>
                             <Chk checked={chk} partial={false} onClick={(e) => { e.stopPropagation(); toggleMonth(ym); }} />
                             <span className="text-xs font-medium text-gray-700">{fmtMonthKey(ym)}</span>
@@ -502,7 +517,7 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
             </svg>
-            AI Recapture Recommendations
+            Ask AI
           </button>
           <button onClick={onClose} aria-label="Close"
             className="ml-auto w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition flex-shrink-0">
@@ -527,8 +542,8 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
                 const prodKeys = Object.keys(p.products).sort();
                 return (
                   <React.Fragment key={pID}>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <td className="border-r border-gray-200 bg-gray-50 align-middle" style={{ position: "sticky", left: 0, zIndex: 3, padding: "7px 12px 7px 16px" }}>
+                    <tr className="border-b border-gray-200">
+                      <td className="border-r border-gray-200 bg-white align-middle" style={{ position: "sticky", left: 0, zIndex: 3, padding: "7px 12px 7px 16px" }}>
                         <div className="flex items-center gap-1.5">
                           <div className="w-[14px] h-[14px] rounded bg-blue-50 flex items-center justify-center flex-shrink-0">
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"/></svg>
@@ -536,12 +551,14 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
                           <span className="text-[11px] font-medium text-gray-700 truncate" title={p.name} style={{ maxWidth: "125px" }}>{p.name}</span>
                         </div>
                       </td>
-                      <td className="bg-gray-50" colSpan={months.length}/>
+                      <td className="bg-white" colSpan={months.length}/>
                     </tr>
                     {prodKeys.map(prod => (
                       <tr key={prod} className="border-b border-gray-100">
-                        <td className="border-r border-gray-200 bg-white align-middle" style={{ position: "sticky", left: 0, zIndex: 3, padding: "8px 12px 8px 16px" }}>
-                          <Badge text={prod} className={hashProductColor(prod) + " max-w-[135px]"}/>
+                        <td className="border-r border-gray-200 bg-white" style={{ position: "sticky", left: 0, zIndex: 3, padding: "8px 12px 8px 16px", verticalAlign: "middle" }}>
+                          <div className="flex items-center">
+                            <Badge text={prod} className={hashProductColor(prod) + " max-w-[135px]"}/>
+                          </div>
                         </td>
                         {months.map(m => (
                           <td key={m} className="text-right align-middle" style={{ padding: "8px 12px" }}><HistoryCell cell={p.products[prod][m]}/></td>
@@ -602,6 +619,9 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
   };
 
   const sections = content ? parseContent(content) : [];
+  const [displayName, displayCountry] = customerName.includes(" — ")
+    ? customerName.split(" — ")
+    : [customerName, null];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }}>
@@ -613,9 +633,17 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2">
               <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
             </svg>
-            <span style={{ fontSize: "10px", fontWeight: 500, color: "#4f46e5", textTransform: "uppercase", letterSpacing: "0.08em" }}>AI Recommendations</span>
+            <span style={{ fontSize: "10px", fontWeight: 500, color: "#4f46e5", textTransform: "uppercase", letterSpacing: "0.08em" }}>Recapture Recommendations</span>
           </div>
-          <h3 style={{ fontSize: "17px", fontWeight: 600, color: "#111827", margin: 0 }}>{customerName}</h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 style={{ fontSize: "17px", fontWeight: 600, color: "#111827", margin: 0 }}>{displayName}</h3>
+            {displayCountry && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gray-100 border border-gray-200 text-[11px] font-medium text-gray-500 flex-shrink-0">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                {displayCountry}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Body */}
@@ -650,11 +678,10 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
 
         {/* Footer */}
         <div style={{ padding: "14px", borderTop: "0.5px solid #e5e7eb", background: "#f9fafb", display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition inline-flex items-center justify-center gap-1.5">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-xs font-medium bg-white text-gray-600 hover:bg-gray-50 transition inline-flex items-center justify-center gap-1.5">
             Back
           </button>
-          <button onClick={onAnalyzeAgain} disabled={loading || failed} className={"flex-1 h-9 rounded-lg text-xs font-medium transition inline-flex items-center justify-center gap-1.5 " + (loading || failed ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-blue-50 text-blue-700 hover:bg-blue-100")}>
+          <button onClick={onAnalyzeAgain} disabled={loading || failed} className={"flex-1 h-9 rounded-lg text-xs font-medium transition inline-flex items-center justify-center gap-1.5 " + (loading || failed ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-purple-50 text-purple-700 hover:bg-purple-100")}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
             </svg>
@@ -823,7 +850,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       (r["Customer ID"] || "").trim() === historyTarget.cID &&
       (((r["Country"] || "").trim()) || "Unknown") === historyTarget.country
     );
-    const months = [...new Set(rows.map(r => r._reportingMonth))].sort();
+    const months = sortedMonths;
     const partners = {};
     for (const row of rows) {
       const pID  = (row["Partner ID"]   || "").trim() || "unknown";
@@ -836,7 +863,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       partners[pID].products[prod][m].value += parseValue(row["Value"]);
     }
     return { months, partners };
-  }, [historyTarget, allRows, typeMap, parseValue]);
+  }, [historyTarget, allRows, typeMap, parseValue, sortedMonths]);
 
   const getCacheKey = (cNm, products) => "ai:" + cNm + "||" + [...products].sort().join(",");
 
@@ -933,6 +960,25 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     );
     return new Set(f.map(r => (r["Country"] || "").trim()).filter(Boolean));
   }, [monthRows, selPartner, selCustomer, selProducts]);
+
+  /* months valid for current non-month filters — computed over ALL rows */
+  const validForMonth = useMemo(() => {
+    const f = allRows.filter(r =>
+      (!selPartner.length  || selPartner.includes((r["Partner ID"]   || "").trim())) &&
+      (!selCustomer.length || selCustomer.includes((r["Customer ID"] || "").trim())) &&
+      (!selProducts.length || selProducts.includes((r["Product"]     || "").trim())) &&
+      (!selCountry.length  || selCountry.includes((r["Country"]      || "").trim()))
+    );
+    return new Set(f.map(r => r._reportingMonth).filter(Boolean));
+  }, [allRows, selPartner, selCustomer, selProducts, selCountry]);
+
+  /* never allow an empty month selection — revert to most recent VALID month */
+  const handleMonthsChange = useCallback((next) => {
+    if (next.length) { setSelMonths(next); return; }
+    const validList = sortedMonths.filter(m => validForMonth.has(m));
+    const fallback  = validForMonth.has(latestMonth) ? latestMonth : (validList[validList.length - 1] || latestMonth);
+    setSelMonths(fallback ? [fallback] : []);
+  }, [sortedMonths, validForMonth, latestMonth]);
 
   /* ── Filter options ── */
   const partnerOptions = useMemo(() => {
@@ -1079,7 +1125,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       {/* Filter bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2">
-          <FYMonthFilter values={selMonths} onChange={v => { setSelMonths(v); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0); }} allMonths={sortedMonths} />
+          <FYMonthFilter values={selMonths} onChange={handleMonthsChange} allMonths={sortedMonths} validMonths={validForMonth} />
           <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }}              options={customerOptions} placeholder="Customer" searchable/></div>
           <div className="flex-1 min-w-0"><MultiSel values={selCountry}  onChange={setSelCountry}                                               options={countryOptions}  placeholder="Country"/></div>
           <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v);  setPartnerPage(0); }}              options={partnerOptions}  placeholder="Partner"  searchable/></div>
@@ -1138,9 +1184,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
               <span></span>
               <span/>
               <span/>
+              <SortTh col="new"       label="New"        sortCol={sortCol} onSort={toggleSort} right/>
               <SortTh col="upsell"    label="Upsell"     sortCol={sortCol} onSort={toggleSort} right/>
               <SortTh col="crosssell" label="Cross-sell" sortCol={sortCol} onSort={toggleSort} right/>
-              <SortTh col="new"       label="New"        sortCol={sortCol} onSort={toggleSort} right/>
               <SortTh col="total"     label="Total"      sortCol={sortCol} onSort={toggleSort} right/>
               <SortTh col="recap"     label="Recapture"  sortCol={sortCol} onSort={toggleSort} right/>
             </div>
@@ -1165,9 +1211,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                     </div>
                     <div className="flex items-center justify-end"><CntBadge label={`${countryKeys.length} countr${countryKeys.length !== 1 ? "ies" : "y"}`}/></div>
                     <div className="flex items-center justify-end"><IDBadge id={cID}/></div>
+                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.new)}</span>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.upsell)}</span>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.crosssell)}</span>
-                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.new)}</span>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.total)}</span>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtPct(rate)}</span>
                   </div>
@@ -1196,13 +1242,13 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                           <div className="flex items-center justify-end"><CntBadge label={`${partnerKeys.length} partner${partnerKeys.length !== 1 ? "s" : ""}`}/></div>
                           <div className="flex items-center justify-end">
                             <button onClick={e => { e.stopPropagation(); setHistoryTarget({ cID, cNm: cd.name, country }); }}
-                              className="inline-flex items-center px-2 h-[20px] rounded border border-gray-200 bg-white text-[10px] font-medium text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition whitespace-nowrap">
+                              className="inline-flex items-center px-2 h-[20px] rounded border border-indigo-200 bg-indigo-50 text-[10px] font-medium text-indigo-600 hover:bg-indigo-100 hover:border-indigo-300 transition whitespace-nowrap">
                               View History
                             </button>
                           </div>
+                          <span className="text-xs text-gray-700 text-right">{ctd.new       !== 0 ? fmtVal(ctd.new)       : <Dash/>}</span>
                           <span className="text-xs text-gray-700 text-right">{ctd.upsell    !== 0 ? fmtVal(ctd.upsell)    : <Dash/>}</span>
                           <span className="text-xs text-gray-700 text-right">{ctd.crosssell !== 0 ? fmtVal(ctd.crosssell) : <Dash/>}</span>
-                          <span className="text-xs text-gray-700 text-right">{ctd.new       !== 0 ? fmtVal(ctd.new)       : <Dash/>}</span>
                           <span className="text-xs text-gray-700 text-right">{fmtVal(ctd.total)}</span>
                           <span className="text-xs text-gray-700 text-right">{fmtPct(ctRate)}</span>
                         </div>
@@ -1230,9 +1276,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                                 </div>
                                 <div className="flex items-center justify-end"><CntBadge label={`${prodKeys.length} product${prodKeys.length !== 1 ? "s" : ""}`}/></div>
                                 <div className="flex items-center justify-end"><IDBadge id={pID}/></div>
+                                <span className="text-xs text-gray-700 text-right">{pd.new       !== 0 ? fmtVal(pd.new)       : <Dash/>}</span>
                                 <span className="text-xs text-gray-700 text-right">{pd.upsell    !== 0 ? fmtVal(pd.upsell)    : <Dash/>}</span>
                                 <span className="text-xs text-gray-700 text-right">{pd.crosssell !== 0 ? fmtVal(pd.crosssell) : <Dash/>}</span>
-                                <span className="text-xs text-gray-700 text-right">{pd.new       !== 0 ? fmtVal(pd.new)       : <Dash/>}</span>
                                 <span className="text-xs text-gray-700 text-right">{fmtVal(pd.total)}</span>
                                 <span className="text-xs text-gray-700 text-right">{fmtPct(pRate)}</span>
                               </div>
@@ -1250,7 +1296,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                                       <Badge text={product} className={hashProductColor(product)}/>
                                     </div>
                                     <span/><span/>
-                                    {["upsell","crosssell","new"].map(t => (
+                                    {["new","upsell","crosssell"].map(t => (
                                       <span key={t} className="text-xs text-gray-600 text-right">{prd[t] !== 0 ? fmtVal(prd[t]) : <Dash/>}</span>
                                     ))}
                                     <span className="text-xs font-medium text-gray-700 text-right">{fmtVal(prd.total)}</span>
@@ -1525,7 +1571,7 @@ function App() {
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => setUploadModalOpen(true)}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap h-[32px] border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100">
+              className="px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap h-[32px] bg-blue-50 text-blue-600 hover:bg-blue-100">
               Upload Data
             </button>
             <button onClick={clearAll} disabled={!hasData}
