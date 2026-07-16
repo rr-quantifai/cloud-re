@@ -496,26 +496,42 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }}>
-      <div className="bg-white rounded-2xl relative" style={{ width: "560px", maxHeight: "80vh", padding: "32px", overflow: "auto" }}>
+      <div className="bg-white rounded-2xl overflow-hidden" style={{ width: "560px", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
+
         {/* Header */}
-        <div className="mb-6 pb-4 border-b border-gray-200">
-          <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">AI Recommendations</p>
-          <h3 className="text-lg font-bold text-gray-900 mt-1">{customerName}</h3>
+        <div style={{ padding: "20px 24px 16px", borderBottom: "0.5px solid #e5e7eb", flexShrink: 0 }}>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2">
+              <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+            </svg>
+            <span style={{ fontSize: "10px", fontWeight: 500, color: "#4f46e5", textTransform: "uppercase", letterSpacing: "0.08em" }}>AI Recommendations</span>
+          </div>
+          <h3 style={{ fontSize: "17px", fontWeight: 600, color: "#111827", margin: 0 }}>{customerName}</h3>
         </div>
 
         {/* Body */}
-        <div className="mb-6 min-h-32">
+        <div style={{ overflowY: "auto", flex: 1 }}>
           {loading && <div className="flex items-center justify-center h-32"><Dots /></div>}
           {!loading && !failed && (
-            <div className="text-sm text-gray-700 leading-relaxed space-y-4">
+            <div>
               {sections.map((section, i) => (
-                <div key={i}>
-                  <h4 className="font-semibold text-gray-900 mb-2">{section.title}</h4>
-                  <ul className="ml-4 space-y-1.5">
+                <div key={i} style={{ padding: "14px 24px", borderBottom: i < sections.length - 1 ? "0.5px solid #e5e7eb" : "none" }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div style={{ width: "22px", height: "22px", borderRadius: "6px", background: "#f5f3ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                      </svg>
+                    </div>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>{section.title}</span>
+                  </div>
+                  <div style={{ paddingLeft: "30px", display: "flex", flexDirection: "column", gap: "4px" }}>
                     {section.bullets.map((bullet, bi) => (
-                      <li key={bi} className="text-gray-700 list-disc">{bullet}</li>
+                      <div key={bi} className="flex items-start gap-2">
+                        <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#a78bfa", flexShrink: 0, marginTop: "6px" }}/>
+                        <span style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.6 }}>{bullet}</span>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               ))}
             </div>
@@ -524,14 +540,18 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-          <button onClick={onAnalyzeAgain} disabled={loading || failed} className={"flex-1 h-9 rounded-lg text-sm font-medium transition " + (loading || failed ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-blue-50 text-blue-600 hover:bg-blue-100")}>
-            Analyze Again
-          </button>
-          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
+        <div style={{ padding: "14px", borderTop: "0.5px solid #e5e7eb", background: "#f9fafb", display: "flex", gap: "8px", flexShrink: 0 }}>
+          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
             Close
           </button>
+          <button onClick={onAnalyzeAgain} disabled={loading || failed} className={"flex-1 h-9 rounded-lg text-xs font-medium transition inline-flex items-center justify-center gap-1.5 " + (loading || failed ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-blue-50 text-blue-700 hover:bg-blue-100")}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+            </svg>
+            Analyze Again
+          </button>
         </div>
+
       </div>
     </div>
   );
@@ -1106,33 +1126,32 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                           );
                         })}
 
-                        {/* Lifecycle rows — visible when country is expanded, 1st-degree indent */}
+                        {/* Lifecycle rows — visible when country is expanded */}
                         {isExpC && (
                           <>
-                            <div className="px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20">
-                              <div className="flex items-start gap-3" style={{marginLeft:"16px"}}>
-                                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap pt-0.5 flex-shrink-0" style={{minWidth:"160px"}}>All products purchased</span>
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  {[...lcData.products].sort().map(p => <Badge key={p} text={p} className={hashProductColor(p)}/>)}
-                                  <button
-                                    onClick={() => openAIModal(cd.name, lcData.products)}
-                                    className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-md border border-blue-200 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition flex-shrink-0"
-                                  >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <circle cx="12" cy="12" r="9"/><path d="M12 6v6M9 9h6"/>
-                                    </svg>
-                                    Get AI Insights
-                                  </button>
-                                </div>
+                            <div className="grid items-center px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20" style={{gridTemplateColumns: GRID, ...GAP}}>
+                              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap" style={{paddingLeft:"16px"}}>All products purchased</span>
+                              <div className="flex flex-wrap gap-1 justify-end items-center" style={{gridColumn:"span 5"}}>
+                                {[...lcData.products].sort().map(p => <Badge key={p} text={p} className={hashProductColor(p)}/>)}
+                              </div>
+                              <div className="flex justify-end items-center" style={{gridColumn:"span 2"}}>
+                                <button
+                                  onClick={() => openAIModal(cd.name, lcData.products)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-md border border-blue-200 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition"
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+                                  </svg>
+                                  Get AI Insights
+                                </button>
                               </div>
                             </div>
-                            <div className="px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20">
-                              <div className="flex items-start gap-3" style={{marginLeft:"16px"}}>
-                                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap pt-0.5 flex-shrink-0" style={{minWidth:"160px"}}>All recorded partners</span>
-                                <div className="flex flex-wrap gap-1">
-                                  {[...lcData.partners].sort().map(p => <span key={p} className="inline-block px-2 py-0.5 text-[10px] rounded-full bg-white border border-gray-200 text-gray-500 whitespace-nowrap">{p}</span>)}
-                                </div>
+                            <div className="grid items-center px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20" style={{gridTemplateColumns: GRID, ...GAP}}>
+                              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap" style={{paddingLeft:"16px"}}>All recorded partners</span>
+                              <div className="flex flex-wrap gap-1 justify-end items-center" style={{gridColumn:"span 5"}}>
+                                {[...lcData.partners].sort().map(p => <span key={p} className="inline-block px-2 py-0.5 text-[10px] rounded-full bg-white border border-gray-200 text-gray-500 whitespace-nowrap">{p}</span>)}
                               </div>
+                              <span style={{gridColumn:"span 2"}}/>
                             </div>
                           </>
                         )}

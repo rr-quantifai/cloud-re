@@ -10,13 +10,15 @@ export default async (req) => {
     }
 
     const productList = [...products].sort().join(", ");
-    const prompt = `I am a Microsoft Cloud Solution Provider. My customer currently uses the following Microsoft products: ${productList}. What other Microsoft products can I sell to them? Be short and direct
+    const prompt = `You are an expert Microsoft Cloud Solution Provider advisor. A customer currently uses: ${productList}
 
-Output ONLY the recommendations, no title, no introduction, no closing note, in exactly this format:
+Identify the 3-4 highest-value Microsoft products to upsell or cross-sell to this specific customer. Prioritize by commercial impact and logical fit with their existing stack. For each, give 2 sharp reasons grounded in what they already use — not generic product descriptions.
+
+Output ONLY the recommendations in exactly this format, no title, no intro, no closing note:
 
 **Product Name**
-- Reason it fits
-- Reason it fits`;
+- Reason specific to their current stack (one line)
+- Reason specific to their current stack (one line)`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
