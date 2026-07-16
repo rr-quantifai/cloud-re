@@ -543,7 +543,7 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
                 return (
                   <React.Fragment key={pID}>
                     <tr className="border-b border-gray-200">
-                      <td className="border-r border-gray-200 bg-white align-middle" style={{ position: "sticky", left: 0, zIndex: 3, padding: "7px 12px 7px 16px" }}>
+                      <td className="border-r border-gray-200 bg-white align-middle" style={{ position: "sticky", left: 0, zIndex: 3, padding: "10px 12px 10px 16px" }}>
                         <div className="flex items-center gap-1.5">
                           <div className="w-[14px] h-[14px] rounded bg-blue-50 flex items-center justify-center flex-shrink-0">
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"/></svg>
@@ -554,14 +554,14 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
                       <td className="bg-white" colSpan={months.length}/>
                     </tr>
                     {prodKeys.map(prod => (
-                      <tr key={prod} className="border-b border-gray-100">
-                        <td className="border-r border-gray-200 bg-white" style={{ position: "sticky", left: 0, zIndex: 3, padding: "8px 12px 8px 16px", verticalAlign: "middle" }}>
+                      <tr key={prod} className="border-b border-dotted border-gray-100">
+                        <td className="border-r border-gray-200 bg-white" style={{ position: "sticky", left: 0, zIndex: 3, padding: "10px 12px 10px 16px", verticalAlign: "middle" }}>
                           <div className="flex items-center">
                             <Badge text={prod} className={hashProductColor(prod) + " max-w-[135px]"}/>
                           </div>
                         </td>
                         {months.map(m => (
-                          <td key={m} className="text-right align-middle" style={{ padding: "8px 12px" }}><HistoryCell cell={p.products[prod][m]}/></td>
+                          <td key={m} className="text-right align-middle" style={{ padding: "10px 12px" }}><HistoryCell cell={p.products[prod][m]}/></td>
                         ))}
                       </tr>
                     ))}
@@ -677,11 +677,11 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "14px", borderTop: "0.5px solid #e5e7eb", background: "#f9fafb", display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-xs font-medium bg-white text-gray-600 hover:bg-gray-50 transition inline-flex items-center justify-center gap-1.5">
+        <div style={{ padding: "14px", borderTop: "1px solid #e5e7eb", background: "#f9fafb", display: "flex", gap: "8px", flexShrink: 0 }}>
+          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-xs font-medium bg-white text-gray-600 hover:bg-gray-50 transition inline-flex items-center justify-center gap-1.5 border border-gray-200">
             Back
           </button>
-          <button onClick={onAnalyzeAgain} disabled={loading || failed} className={"flex-1 h-9 rounded-lg text-xs font-medium transition inline-flex items-center justify-center gap-1.5 " + (loading || failed ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-purple-50 text-purple-700 hover:bg-purple-100")}>
+          <button onClick={onAnalyzeAgain} disabled={loading || failed} className={"flex-1 h-9 rounded-lg text-xs font-medium transition inline-flex items-center justify-center gap-1.5 " + (loading || failed ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200" : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200")}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
             </svg>
