@@ -556,8 +556,11 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
                     {prodKeys.map(prod => (
                       <tr key={prod} className="border-b border-dotted border-gray-100">
                         <td className="border-r border-gray-200 bg-white" style={{ position: "sticky", left: 0, zIndex: 3, padding: "10px 12px 10px 16px", verticalAlign: "middle" }}>
-                          <div className="flex items-center">
-                            <Badge text={prod} className={hashProductColor(prod) + " max-w-[135px]"}/>
+                          <div className="flex items-center gap-1.5 min-w-0" style={{ marginLeft: "16px" }}>
+                            <div className="w-[16px] h-[16px] rounded bg-violet-50 flex items-center justify-center flex-shrink-0">
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                            </div>
+                            <Badge text={prod} className={hashProductColor(prod) + " max-w-[100px]"}/>
                           </div>
                         </td>
                         {months.map(m => (
@@ -842,7 +845,12 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [sortCol, setSortCol]                 = useState(null);
   const [historyTarget, setHistoryTarget]     = useState(null);  // { cID, cNm, country }
 
-  const parseValue = useCallback((v) => parseFloat((v || "").toString().replace(/[^0-9.-]/g, "")) || 0, []);
+  const parseValue = useCallback((v) => {
+  const s = (v || "").toString().trim();
+  const isAcctNeg = s.startsWith("(") && s.endsWith(")");
+  const n = parseFloat(s.replace(/[^0-9.-]/g, "")) || 0;
+  return isAcctNeg ? -n : n;
+}, []);
 
   const historyData = useMemo(() => {
     if (!historyTarget) return null;
@@ -983,7 +991,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   /* ── Filter options ── */
   const partnerOptions = useMemo(() => {
     const all = {};
-    for (const r of monthRows) {
+    for (const r of allRows) {
       const id = (r["Partner ID"] || "").trim(), name = (r["Partner Name"] || "").trim();
       if (id) all[id] = name || id;
     }
@@ -993,7 +1001,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
 
   const customerOptions = useMemo(() => {
     const all = {};
-    for (const r of monthRows) {
+    for (const r of allRows) {
       const id = (r["Customer ID"] || "").trim(), name = (r["Customer Name"] || "").trim();
       if (id) all[id] = name || id;
     }
@@ -1002,12 +1010,12 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   }, [monthRows, validForCustomer]);
 
   const productOptions = useMemo(() => {
-    const all = [...new Set(monthRows.map(r => (r["Product"] || "").trim()).filter(Boolean))].sort();
+    const all = [...new Set(allRows.map(r => (r["Product"] || "").trim()).filter(Boolean))].sort();
     return all.map(p => ({ value: p, label: p, disabled: !validForProduct.has(p) }));
   }, [monthRows, validForProduct]);
 
   const countryOptions = useMemo(() => {
-    const all = [...new Set(monthRows.map(r => (r["Country"] || "").trim()).filter(Boolean))].sort();
+    const all = [...new Set(allRows.map(r => (r["Country"] || "").trim()).filter(Boolean))].sort();
     return all.map(c => ({ value: c, label: c, disabled: !validForCountry.has(c) }));
   }, [monthRows, validForCountry]);
 
