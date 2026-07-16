@@ -137,29 +137,32 @@ const buildTypeMap = (allRows, sortedMonths) => {
     if (!byMonth[m]) byMonth[m] = [];
     byMonth[m].push(row);
   }
-  const seenCustomers = new Set();  // customer IDs seen in any prior month
-  const custProducts  = {};         // customerID → Set<product> ever bought
+  const seenRelationships = new Set();  // custID|||country|||partnerID seen in any prior month
+  const relProducts       = {};         // relationship key → Set<product> ever bought
   const typeMap = {};
   for (const month of sortedMonths) {
     const rows  = byMonth[month] || [];
     const toAdd = [];
     for (const row of rows) {
-      const custID = (row["Customer ID"] || "").trim();
-      const prod   = (row["Product"]     || "").trim();
+      const custID  = (row["Customer ID"] || "").trim();
+      const country = (row["Country"]     || "").trim();
+      const pID     = (row["Partner ID"]  || "").trim();
+      const prod    = (row["Product"]     || "").trim();
       if (!custID) { typeMap[row._id] = "new"; continue; }
-      if (!seenCustomers.has(custID)) {
+      const relKey = custID + "|||" + country + "|||" + pID;
+      if (!seenRelationships.has(relKey)) {
         typeMap[row._id] = "new";
-      } else if (prod && custProducts[custID]?.has(prod)) {
+      } else if (prod && relProducts[relKey]?.has(prod)) {
         typeMap[row._id] = "upsell";
       } else {
         typeMap[row._id] = "crosssell";
       }
-      toAdd.push([custID, prod]);
+      toAdd.push([relKey, prod]);
     }
     for (const [k, p] of toAdd) {
-      seenCustomers.add(k);
-      if (!custProducts[k]) custProducts[k] = new Set();
-      if (p) custProducts[k].add(p);
+      seenRelationships.add(k);
+      if (!relProducts[k]) relProducts[k] = new Set();
+      if (p) relProducts[k].add(p);
     }
   }
   return typeMap;
@@ -462,6 +465,112 @@ const CntBadge = ({ label }) => <span className="inline-block px-1.5 py-px text-
 const Dash     = ()          => <span className="text-gray-200 text-xs">—</span>;
 
 /* ═══════════════════════════════════════════════════════════════════
+   HISTORY MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+const MODAL_W   = "560px";
+const MODAL_H   = "80vh";
+const TYPE_DOTS = { new: "#7c3aed", upsell: "#16a34a", crosssell: "#2563eb" };
+const TYPE_LABELS = [["new","New"],["upsell","Upsell"],["crosssell","Cross-sell"]];
+
+const HistoryCell = ({ cell }) => {
+  if (!cell) return <span className="text-gray-200 text-xs">—</span>;
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      <div className="w-[6px] h-[6px] rounded-full flex-shrink-0" style={{ background: TYPE_DOTS[cell.type] }}/>
+      <span className="text-[11px] font-medium text-gray-700 whitespace-nowrap">{fmtVal(cell.value)}</span>
+    </div>
+  );
+};
+
+const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) => {
+  if (!open || !data) return null;
+  const { months, partners } = data;
+  const partnerIDs = Object.keys(partners).sort((a, b) => partners[a].name.localeCompare(partners[b].name));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }}>
+      <div className="bg-white rounded-2xl overflow-hidden flex flex-col" style={{ width: MODAL_W, maxHeight: MODAL_H }}>
+
+        {/* Header */}
+        <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-200 flex-shrink-0">
+          <span className="text-[15px] font-semibold text-gray-900 truncate" title={customerName}>{customerName}</span>
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gray-100 border border-gray-200 text-[11px] font-medium text-gray-500 flex-shrink-0">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+            {country}
+          </span>
+          <button onClick={onAskAI}
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-indigo-200 bg-indigo-50 text-[11px] font-medium text-indigo-600 hover:bg-indigo-100 hover:border-indigo-300 transition flex-shrink-0">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+            </svg>
+            AI Recapture Recommendations
+          </button>
+          <button onClick={onClose} aria-label="Close"
+            className="ml-auto w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition flex-shrink-0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-auto">
+          <table className="border-collapse text-xs" style={{ minWidth: "max-content", width: "100%" }}>
+            <thead>
+              <tr className="bg-gray-50" style={{ position: "sticky", top: 0, zIndex: 4 }}>
+                <th className="text-left border-b border-r border-gray-200 bg-gray-50" style={{ position: "sticky", left: 0, zIndex: 5, width: "170px", minWidth: "170px", padding: "8px 12px 8px 16px" }}/>
+                {months.map(m => (
+                  <th key={m} className="text-right border-b border-gray-200 text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap" style={{ padding: "8px 12px", minWidth: "88px" }}>{fmtMonthKey(m)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {partnerIDs.map(pID => {
+                const p = partners[pID];
+                const prodKeys = Object.keys(p.products).sort();
+                return (
+                  <React.Fragment key={pID}>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <td className="border-r border-gray-200 bg-gray-50 align-middle" style={{ position: "sticky", left: 0, zIndex: 3, padding: "7px 12px 7px 16px" }}>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-[14px] h-[14px] rounded bg-blue-50 flex items-center justify-center flex-shrink-0">
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"/></svg>
+                          </div>
+                          <span className="text-[11px] font-medium text-gray-700 truncate" title={p.name} style={{ maxWidth: "125px" }}>{p.name}</span>
+                        </div>
+                      </td>
+                      <td className="bg-gray-50" colSpan={months.length}/>
+                    </tr>
+                    {prodKeys.map(prod => (
+                      <tr key={prod} className="border-b border-gray-100">
+                        <td className="border-r border-gray-200 bg-white align-middle" style={{ position: "sticky", left: 0, zIndex: 3, padding: "8px 12px 8px 16px" }}>
+                          <Badge text={prod} className={hashProductColor(prod) + " max-w-[135px]"}/>
+                        </td>
+                        {months.map(m => (
+                          <td key={m} className="text-right align-middle" style={{ padding: "8px 12px" }}><HistoryCell cell={p.products[prod][m]}/></td>
+                        ))}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Legend footer */}
+        <div className="flex items-center gap-5 px-5 py-2.5 bg-gray-50 border-t border-gray-200 flex-shrink-0">
+          {TYPE_LABELS.map(([k, label]) => (
+            <div key={k} className="flex items-center gap-1.5">
+              <div className="w-[6px] h-[6px] rounded-full flex-shrink-0" style={{ background: TYPE_DOTS[k] }}/>
+              <span className="text-[10px] text-gray-500">{label}</span>
+            </div>
+          ))}
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════════
    AI INSIGHTS MODAL
    ═══════════════════════════════════════════════════════════════════ */
 const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading, content, failed }) => {
@@ -541,8 +650,9 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
 
         {/* Footer */}
         <div style={{ padding: "14px", borderTop: "0.5px solid #e5e7eb", background: "#f9fafb", display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-            Close
+          <button onClick={onClose} className="flex-1 h-9 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition inline-flex items-center justify-center gap-1.5">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Back
           </button>
           <button onClick={onAnalyzeAgain} disabled={loading || failed} className={"flex-1 h-9 rounded-lg text-xs font-medium transition inline-flex items-center justify-center gap-1.5 " + (loading || failed ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-blue-50 text-blue-700 hover:bg-blue-100")}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -688,21 +798,45 @@ const callClaudeAPI = async (products) => {
    ═══════════════════════════════════════════════════════════════════ */
 const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const latestMonth = sortedMonths.length ? sortedMonths[sortedMonths.length - 1] : null;
-  const [selMonths, setSelMonths]       = useState(() => latestMonth ? [latestMonth] : []);
-  const [selPartner, setSelPartner]     = useState([]);
-  const [selCustomer, setSelCustomer]   = useState([]);
-  const [selProducts, setSelProducts]   = useState([]);
-  const [selCountry, setSelCountry]     = useState([]);
+  const [selMonths, setSelMonths]             = useState(() => latestMonth ? [latestMonth] : []);
+  const [selPartner, setSelPartner]           = useState([]);
+  const [selCustomer, setSelCustomer]         = useState([]);
+  const [selProducts, setSelProducts]         = useState([]);
+  const [selCountry, setSelCountry]           = useState([]);
   const [expandedCust, setExpandedCust]       = useState(new Set());
   const [expandedCountry, setExpandedCountry] = useState(new Set());
   const [expandedPartner, setExpandedPartner] = useState(new Set());
-  const [aiModalOpen, setAIModalOpen]       = useState(false);
-  const [aiCustomerName, setAICustomerName] = useState("");
-  const [aiProducts, setAIProducts]         = useState(new Set());
-  const [aiLoading, setAILoading]           = useState(false);
-  const [aiContent, setAIContent]           = useState("");
-  const [aiFailed, setAIFailed]             = useState(false);
-  const [sortCol, setSortCol]           = useState(null);
+  const [aiModalOpen, setAIModalOpen]         = useState(false);
+  const [aiCustomerName, setAICustomerName]   = useState("");
+  const [aiProducts, setAIProducts]           = useState(new Set());
+  const [aiLoading, setAILoading]             = useState(false);
+  const [aiContent, setAIContent]             = useState("");
+  const [aiFailed, setAIFailed]               = useState(false);
+  const [sortCol, setSortCol]                 = useState(null);
+  const [historyTarget, setHistoryTarget]     = useState(null);  // { cID, cNm, country }
+
+  const parseValue = useCallback((v) => parseFloat((v || "").toString().replace(/[^0-9.-]/g, "")) || 0, []);
+
+  const historyData = useMemo(() => {
+    if (!historyTarget) return null;
+    const rows = allRows.filter(r =>
+      (r["Customer ID"] || "").trim() === historyTarget.cID &&
+      (((r["Country"] || "").trim()) || "Unknown") === historyTarget.country
+    );
+    const months = [...new Set(rows.map(r => r._reportingMonth))].sort();
+    const partners = {};
+    for (const row of rows) {
+      const pID  = (row["Partner ID"]   || "").trim() || "unknown";
+      const pNm  = (row["Partner Name"] || "").trim() || "Unknown Partner";
+      const prod = (row["Product"]      || "").trim() || "Blank";
+      const m    = row._reportingMonth;
+      if (!partners[pID]) partners[pID] = { name: pNm, products: {} };
+      if (!partners[pID].products[prod]) partners[pID].products[prod] = {};
+      if (!partners[pID].products[prod][m]) partners[pID].products[prod][m] = { type: typeMap[row._id] || "new", value: 0 };
+      partners[pID].products[prod][m].value += parseValue(row["Value"]);
+    }
+    return { months, partners };
+  }, [historyTarget, allRows, typeMap, parseValue]);
 
   const getCacheKey = (cNm, products) => "ai:" + cNm + "||" + [...products].sort().join(",");
 
@@ -757,8 +891,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     const mapped = effectiveMonths.map(ym => { const [y, m] = ym.split("-").map(Number); return `${y - 1}-${String(m).padStart(2, "0")}`; });
     return mapped.every(ym => sortedMonths.includes(ym)) ? mapped : [];
   }, [effectiveMonths, sortedMonths]);
-
-  const parseValue = useCallback((v) => parseFloat((v || "").toString().replace(/[^0-9.-]/g, "")) || 0, []);
 
   const monthRows = useMemo(() =>
     allRows.filter(r => effectiveMonths.includes(r._reportingMonth)),
@@ -1047,7 +1179,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                     const isExpC      = expandedCountry.has(ctKey);
                     const partnerKeys = Object.keys(ctd.partners).sort();
                     const ctRate      = recapRate(ctd);
-                    const lcData      = customerLifecycleData[cID]?.[country] || { partners: new Set(), products: new Set() };
                     return (
                       <React.Fragment key={ctKey}>
 
@@ -1063,7 +1194,12 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                             <span className="text-xs font-medium text-gray-700 truncate" title={country}>{country}</span>
                           </div>
                           <div className="flex items-center justify-end"><CntBadge label={`${partnerKeys.length} partner${partnerKeys.length !== 1 ? "s" : ""}`}/></div>
-                          <span/>
+                          <div className="flex items-center justify-end">
+                            <button onClick={e => { e.stopPropagation(); setHistoryTarget({ cID, cNm: cd.name, country }); }}
+                              className="inline-flex items-center px-2 h-[20px] rounded border border-gray-200 bg-white text-[10px] font-medium text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition whitespace-nowrap">
+                              View History
+                            </button>
+                          </div>
                           <span className="text-xs text-gray-700 text-right">{ctd.upsell    !== 0 ? fmtVal(ctd.upsell)    : <Dash/>}</span>
                           <span className="text-xs text-gray-700 text-right">{ctd.crosssell !== 0 ? fmtVal(ctd.crosssell) : <Dash/>}</span>
                           <span className="text-xs text-gray-700 text-right">{ctd.new       !== 0 ? fmtVal(ctd.new)       : <Dash/>}</span>
@@ -1125,36 +1261,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                             </React.Fragment>
                           );
                         })}
-
-                        {/* Lifecycle rows — visible when country is expanded */}
-                        {isExpC && (
-                          <>
-                            <div className="grid items-center px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20" style={{gridTemplateColumns: GRID, ...GAP}}>
-                              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap" style={{paddingLeft:"16px"}}>All products purchased</span>
-                              <div className="flex flex-wrap gap-1 justify-end items-center" style={{gridColumn:"span 5"}}>
-                                {[...lcData.products].sort().map(p => <Badge key={p} text={p} className={hashProductColor(p)}/>)}
-                              </div>
-                              <div className="flex justify-end items-center" style={{gridColumn:"span 2"}}>
-                                <button
-                                  onClick={() => openAIModal(cd.name, lcData.products)}
-                                  className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-md border border-blue-200 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition"
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-                                  </svg>
-                                  Get AI Insights
-                                </button>
-                              </div>
-                            </div>
-                            <div className="grid items-center px-4 py-2.5 border-t border-dotted border-gray-200 bg-indigo-50/20" style={{gridTemplateColumns: GRID, ...GAP}}>
-                              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap" style={{paddingLeft:"16px"}}>All recorded partners</span>
-                              <div className="flex flex-wrap gap-1 justify-end items-center" style={{gridColumn:"span 5"}}>
-                                {[...lcData.partners].sort().map(p => <span key={p} className="inline-block px-2 py-0.5 text-[10px] rounded-full bg-white border border-gray-200 text-gray-500 whitespace-nowrap">{p}</span>)}
-                              </div>
-                              <span style={{gridColumn:"span 2"}}/>
-                            </div>
-                          </>
-                        )}
                       </React.Fragment>
                     );
                   })}
@@ -1163,6 +1269,17 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
             })}
           </div>
       }
+      <HistoryModal
+        open={!!historyTarget}
+        customerName={historyTarget?.cNm || ""}
+        country={historyTarget?.country || ""}
+        data={historyData}
+        onClose={() => setHistoryTarget(null)}
+        onAskAI={() => {
+          const products = customerLifecycleData[historyTarget.cID]?.[historyTarget.country]?.products || new Set();
+          openAIModal(historyTarget.cNm + " — " + historyTarget.country, products);
+        }}
+      />
       <AIInsightsModal
         open={aiModalOpen}
         customerName={aiCustomerName}
