@@ -4,23 +4,19 @@ export default async (req) => {
   }
 
   try {
-    const { customerName, products } = await req.json();
-    if (!customerName || !Array.isArray(products) || products.length === 0) {
-      return new Response(JSON.stringify({ error: "Missing data" }), { status: 400 });
+    const { products } = await req.json();
+    if (!Array.isArray(products) || products.length === 0) {
+      return new Response(JSON.stringify({ error: "Missing products" }), { status: 400 });
     }
 
     const productList = [...products].sort().join(", ");
-    const prompt = `You are a seasoned and expert Microsoft Cloud Solution Provider (CSP) advisor. A customer named "${customerName}" currently uses these products: ${productList}
+    const prompt = `I am a Microsoft Cloud Solution Provider. My customer currently uses the following Microsoft products: ${productList}. What other Microsoft products can I sell to them? Be short and direct
 
-     Recommend 3-4 other Microsoft products they should consider as logical extensions of their current stack. For each product, include 2-3 key reasons why it fits their stack.
+Output ONLY the recommendations, no title, no introduction, no closing note, in exactly this format:
 
-     Format each recommendation as:
-
-     Product Name
-      - Reason 1
-      - Reason 2
-
-     Be concise, direct, and specific to their use case. No flowery language.`;
+**Product Name**
+- Reason it fits
+- Reason it fits`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

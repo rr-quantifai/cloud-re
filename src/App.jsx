@@ -464,46 +464,60 @@ const Dash     = ()          => <span className="text-gray-200 text-xs">—</spa
 /* ═══════════════════════════════════════════════════════════════════
    AI INSIGHTS MODAL
    ═══════════════════════════════════════════════════════════════════ */
-const AIInsightsModal = ({ open, customerName, products, onClose, onAnalyzeAgain, loading, content, failed }) => {
+const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading, content, failed }) => {
   if (!open) return null;
+  
+  const parseContent = (text) => {
+    const lines = text.split("\n");
+    const sections = [];
+    let currentSection = null;
+    
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      
+      if (line.startsWith("**") && line.endsWith("**")) {
+        if (currentSection) sections.push(currentSection);
+        currentSection = { title: line.replace(/\*\*/g, ""), bullets: [] };
+      } else if (line.startsWith("- ") || line.startsWith("* ")) {
+        if (currentSection) {
+          currentSection.bullets.push(line.replace(/^[-*]\s*/, "").replace(/\.$/, ""));
+        }
+      } else if (currentSection && !line.startsWith("#")) {
+        if (currentSection.bullets.length === 0) {
+          currentSection.bullets.push(line.replace(/\.$/, ""));
+        }
+      }
+    }
+    if (currentSection) sections.push(currentSection);
+    return sections;
+  };
+
+  const sections = content ? parseContent(content) : [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }}>
       <div className="bg-white rounded-2xl relative" style={{ width: "560px", maxHeight: "80vh", padding: "32px", overflow: "auto" }}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
-          <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">AI Recommendations</p>
-            <h3 className="text-lg font-bold text-gray-900 mt-1">{customerName}</h3>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
+        <div className="mb-6 pb-4 border-b border-gray-200">
+          <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">AI Recommendations</p>
+          <h3 className="text-lg font-bold text-gray-900 mt-1">{customerName}</h3>
         </div>
 
         {/* Body */}
         <div className="mb-6 min-h-32">
           {loading && <div className="flex items-center justify-center h-32"><Dots /></div>}
           {!loading && !failed && (
-            <div className="text-sm text-gray-700 leading-relaxed">
-              {content?.split("\n\n").map((block, i) => {
-                const lines = block.split("\n");
-                const isHeading = lines[0] && !lines[0].startsWith("-");
-                if (isHeading) {
-                  const heading = lines[0];
-                  const bullets = lines.slice(1).filter(l => l.trim().startsWith("-"));
-                  return (
-                    <div key={i} className="mb-4 last:mb-0">
-                      <h4 className="font-semibold text-gray-900 mb-2">{heading}</h4>
-                      <ul className="ml-4 space-y-1">
-                        {bullets.map((bullet, bi) => (
-                          <li key={bi} className="text-gray-700 list-disc">{bullet.replace(/^-\s*/, "").replace(/\.$/, "")}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                }
-                return null;
-              })}
+            <div className="text-sm text-gray-700 leading-relaxed space-y-4">
+              {sections.map((section, i) => (
+                <div key={i}>
+                  <h4 className="font-semibold text-gray-900 mb-2">{section.title}</h4>
+                  <ul className="ml-4 space-y-1.5">
+                    {section.bullets.map((bullet, bi) => (
+                      <li key={bi} className="text-gray-700 list-disc">{bullet}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           )}
           {failed && <div className="flex items-center justify-center h-32"><p className="text-sm text-gray-400">Unable to load</p></div>}
@@ -633,11 +647,11 @@ const UploadModal = ({ uploadState, handleUpload, hasData, onClose, fileRef }) =
 };
 
 /* ─ Claude API call for Microsoft recommendations ─ */
-const callClaudeAPI = async (customerName, products) => {
+const callClaudeAPI = async (products) => {
   const response = await fetch("/.netlify/functions/get-microsoft-recommendations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ customerName, products: [...products] }),
+    body: JSON.stringify({ products: [...products] }),
   });
 
   if (!response.ok) {
@@ -670,25 +684,35 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [aiFailed, setAIFailed]             = useState(false);
   const [sortCol, setSortCol]           = useState(null);
 
-  const openAIModal = useCallback((cNm, products) => {
+  const getCacheKey = (cNm, products) => "ai:" + cNm + "||" + [...products].sort().join(",");
+
+  const openAIModal = useCallback(async (cNm, products) => {
     setAICustomerName(cNm);
     setAIProducts(products);
-    setAILoading(true);
-    setAIContent("");
     setAIFailed(false);
     setAIModalOpen(true);
-    callClaudeAPI(cNm, products)
-      .then(setAIContent)
+    setAILoading(true);
+    setAIContent("");
+    const cacheKey = getCacheKey(cNm, products);
+    const cached = await psGet(cacheKey);
+    if (cached) {
+      setAIContent(cached);
+      setAILoading(false);
+      return;
+    }
+    callClaudeAPI(products)
+      .then((content) => { setAIContent(content); psSet(cacheKey, content); })
       .catch((err) => { console.error("[CloudRe] AI:", err); setAIFailed(true); })
       .finally(() => setAILoading(false));
   }, []);
 
   const onAnalyzeAgain = useCallback(() => {
+    const cacheKey = getCacheKey(aiCustomerName, aiProducts);
     setAILoading(true);
     setAIContent("");
     setAIFailed(false);
-    callClaudeAPI(aiCustomerName, aiProducts)
-      .then(setAIContent)
+    callClaudeAPI(aiProducts)
+      .then((content) => { setAIContent(content); psSet(cacheKey, content); })
       .catch((err) => { console.error("[CloudRe] AI:", err); setAIFailed(true); })
       .finally(() => setAILoading(false));
   }, [aiCustomerName, aiProducts]);
@@ -1092,10 +1116,12 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                                   {[...lcData.products].sort().map(p => <Badge key={p} text={p} className={hashProductColor(p)}/>)}
                                   <button
                                     onClick={() => openAIModal(cd.name, lcData.products)}
-                                    title="Get AI Insights"
-                                    className="ml-2 w-6 h-6 rounded-md flex items-center justify-center text-blue-600 hover:bg-blue-50 transition flex-shrink-0"
+                                    className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-md border border-blue-200 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition flex-shrink-0"
                                   >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <circle cx="12" cy="12" r="9"/><path d="M12 6v6M9 9h6"/>
+                                    </svg>
+                                    Get AI Insights
                                   </button>
                                 </div>
                               </div>
@@ -1121,7 +1147,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       <AIInsightsModal
         open={aiModalOpen}
         customerName={aiCustomerName}
-        products={aiProducts}
         onClose={() => setAIModalOpen(false)}
         onAnalyzeAgain={onAnalyzeAgain}
         loading={aiLoading}
@@ -1313,9 +1338,12 @@ function App() {
   /* ── Clear all ── */
   const clearAll = useCallback(async () => {
     setAllRows([]); setUploadState(null);
-    const idx = await psGet("rows_idx") || [];
-    for (const k of idx) await psDel("rows:" + k);
-    await psDel("rows_idx");
+    try {
+      const db = await getIDB();
+      const tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").clear();
+      await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+    } catch {}
   }, []);
 
   const closeModal = useCallback(() => {
