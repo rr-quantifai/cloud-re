@@ -89,6 +89,12 @@ const REQUIRED_COLS = ["custid", "EndCustomer", "InvoiceDate", "amount", "Subscr
 const extractPartnerName = (v) => { const s = (v||"").trim(); const i = s.indexOf("~"); return i !== -1 ? s.slice(i+1).trim() : s; };
 const extractPartnerID   = (v) => { const s = (v||"").trim(); const i = s.indexOf("~"); return i !== -1 ? s.slice(0,i).trim() : ""; };
 const extractCountry     = (v) => { const s = (v||"").trim(); const i = s.indexOf("-"); return i !== -1 ? s.slice(0,i).trim() : s; };
+const parseValue = (v) => {
+  const s = (v || "").toString().trim();
+  const isAcctNeg = s.startsWith("(") && s.endsWith(")");
+  const n = parseFloat(s.replace(/[^0-9.-]/g, "")) || 0;
+  return isAcctNeg ? -n : n;
+};
 const PAGE_SIZE = 25;
 const MIN_DESKTOP = 1024;
 
@@ -854,13 +860,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [sortCol, setSortCol]                 = useState(null);
   const [historyTarget, setHistoryTarget]     = useState(null);  // { cID, cNm, country }
 
-  const parseValue = useCallback((v) => {
-    const s = (v || "").toString().trim();
-    const isAcctNeg = s.startsWith("(") && s.endsWith(")");
-    const n = parseFloat(s.replace(/[^0-9.-]/g, "")) || 0;
-    return isAcctNeg ? -n : n;
-  }, []);
-
   const historyData = useMemo(() => {
     if (!historyTarget) return null;
     const rows = allRows.filter(r =>
@@ -877,10 +876,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       if (!partners[pID]) partners[pID] = { name: pNm, products: {} };
       if (!partners[pID].products[prod]) partners[pID].products[prod] = {};
       if (!partners[pID].products[prod][m]) partners[pID].products[prod][m] = { type: typeMap[row._id] || "new", value: 0 };
-      partners[pID].products[prod][m].value += parseValue(row["Value"]);
+      partners[pID].products[prod][m].value += row["Value"];
     }
     return { months, partners };
-  }, [historyTarget, allRows, typeMap, parseValue, sortedMonths]);
+  }, [historyTarget, allRows, typeMap, sortedMonths]);
 
   const getCacheKey = (cNm, products) => "ai:" + cNm + "||" + [...products].sort().join(",");
 
@@ -1028,7 +1027,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     const byCustomer = {}, totals = { upsell: 0, crosssell: 0, new: 0, total: 0 };
     for (const row of rows) {
       const type    = typeMap[row._id] || "new";
-      const val     = parseValue(row["Value"]);
+      const val     = row["Value"];
       totals[type] += val; totals.total += val;
       if (totalsOnly) continue;
       const cID     = (row["Customer ID"]   || "").trim() || "unknown";
@@ -1050,7 +1049,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       }
     }
     return { byCustomer, totals };
-  }, [allRows, typeMap, parseValue]);
+  }, [allRows, typeMap]);
 
   const { byCustomer: currentCustomers, totals: currentTotals } = useMemo(
     () => aggregate(effectiveMonths, selPartner, selCustomer, selProducts, selCountry),
@@ -1474,7 +1473,7 @@ function App() {
           "Partner Name":  extractPartnerName(r["partnername"]),
           "Partner ID":    extractPartnerID(r["partnername"]),
           "Product":       isBlank(r["SubscriptionName"] || "") ? "Blank" : (r["SubscriptionName"] || "").trim(),
-          "Value":         ((r["amount"]           || "").trim() || "0"),
+          "Value":         parseValue(r["amount"]),
           "Country":       extractCountry(r["storeid"]),
         }));
         console.log("[CloudRe]", name, "— normalized sample row:", normalized[0]);
