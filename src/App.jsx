@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback, useEffect, startTransition } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect, useDeferredValue } from "react";
 import Papa from "papaparse";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -925,9 +925,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     }
   }, [latestMonth]);
 
+  const deferredMonths  = useDeferredValue(selMonths);
   const effectiveMonths = useMemo(
-    () => selMonths.length ? selMonths : (latestMonth ? [latestMonth] : []),
-    [selMonths, latestMonth]
+    () => deferredMonths.length ? deferredMonths : (latestMonth ? [latestMonth] : []),
+    [deferredMonths, latestMonth]
   );
 
   const priorYearMonths = useMemo(() => {
@@ -973,12 +974,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
 
   /* never allow an empty month selection — revert to most recent VALID month */
   const handleMonthsChange = useCallback((next) => {
-    startTransition(() => {
-      if (next.length) { setSelMonths(next); return; }
-      const validList = sortedMonths.filter(m => validForMonth.has(m));
-      const fallback  = validForMonth.has(latestMonth) ? latestMonth : (validList[validList.length - 1] || latestMonth);
-      setSelMonths(fallback ? [fallback] : []);
-    });
+    if (next.length) { setSelMonths(next); return; }
+    const validList = sortedMonths.filter(m => validForMonth.has(m));
+    const fallback  = validForMonth.has(latestMonth) ? latestMonth : (validList[validList.length - 1] || latestMonth);
+    setSelMonths(fallback ? [fallback] : []);
   }, [sortedMonths, validForMonth, latestMonth]);
 
   /* ── Filter options ── */
@@ -1016,12 +1015,17 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const aggregate = useCallback((months, partnerFilter, customerFilter, prodFilter, countryFilter, totalsOnly = false) => {
     const empty = { byCustomer: {}, totals: { upsell: 0, crosssell: 0, new: 0, total: 0 } };
     if (!months || !months.length) return empty;
+    const monthSet   = new Set(months);
+    const partnerSet = partnerFilter.length  ? new Set(partnerFilter)  : null;
+    const custSet    = customerFilter.length ? new Set(customerFilter) : null;
+    const prodSet    = prodFilter.length     ? new Set(prodFilter)     : null;
+    const countrySet = countryFilter.length  ? new Set(countryFilter)  : null;
     const rows = allRows.filter(r => {
-      if (!months.includes(r._reportingMonth)) return false;
-      if (partnerFilter.length  && !partnerFilter.includes((r["Partner ID"]   || "").trim())) return false;
-      if (customerFilter.length && !customerFilter.includes((r["Customer ID"] || "").trim())) return false;
-      if (prodFilter.length     && !prodFilter.includes((r["Product"]         || "").trim())) return false;
-      if (countryFilter.length  && !countryFilter.includes((r["Country"]      || "").trim())) return false;
+      if (!monthSet.has(r._reportingMonth)) return false;
+      if (partnerSet && !partnerSet.has((r["Partner ID"]   || "").trim())) return false;
+      if (custSet    && !custSet.has((r["Customer ID"]     || "").trim())) return false;
+      if (prodSet    && !prodSet.has((r["Product"]         || "").trim())) return false;
+      if (countrySet && !countrySet.has((r["Country"]      || "").trim())) return false;
       return true;
     });
     const byCustomer = {}, totals = { upsell: 0, crosssell: 0, new: 0, total: 0 };
