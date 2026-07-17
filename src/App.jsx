@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect, startTransition } from "react";
 import Papa from "papaparse";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -54,8 +54,10 @@ const parseDateFlexible = (s) => {
   if (dmy) {
     const rawYear = parseInt(dmy[3], 10);
     const year    = dmy[3].length === 2 ? 2000 + rawYear : rawYear;
-    const d = new Date(`${year}-${dmy[2].padStart(2,"0")}-${dmy[1].padStart(2,"0")}T00:00:00Z`);
-    if (!isNaN(d)) return d;
+    const month = Number(dmy[2]);
+    const day   = Number(dmy[1]);
+    const d = new Date(year, month - 1, day);
+    if (!isNaN(d) && d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day) return d;
   }
   const d = new Date(t);
   if (!isNaN(d)) return d;
@@ -121,6 +123,13 @@ const validateCsv = (rows) => {
   if (missing.length) return { valid: false, message: `Missing: ${missing.join(", ")}` };
   for (const row of rows.slice(0, 5)) {
     if (!getMonthKey(row["InvoiceDate"])) return { valid: false, message: "Cannot parse date column" };
+  }
+  /* DD/MM guard: a month component > 12 proves the file is MM/DD, not DD/MM */
+  for (const row of rows) {
+    const m = (row["InvoiceDate"] || "").trim().match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+    if (m && Number(m[2]) > 12) {
+      return { valid: false, message: `Date "${row["InvoiceDate"]}" is not DD/MM — file appears to be MM/DD format` };
+    }
   }
   return { valid: true };
 };
@@ -289,7 +298,7 @@ const KPI_CONFIG = [
 const ChangeChip = ({ curr, prior, isPct = false }) => {
   const neutral = "inline-flex text-[10px] font-medium px-1.5 py-px rounded-full flex-shrink-0 border bg-slate-100 text-slate-400 border-slate-200";
   if (prior == null || (!isPct && prior === 0)) return <span className={neutral}>—</span>;
-  const delta = isPct ? curr - prior : ((curr - prior) / prior) * 100;
+  const delta = isPct ? curr - prior : ((curr - prior) / Math.abs(prior)) * 100;
   if (Math.abs(delta) < 0.05) return <span className={neutral}>—</span>;
   const pos   = delta >= 0;
   const label = isPct ? `${Math.abs(delta).toFixed(1)}pp` : `${Math.abs(delta).toFixed(1)}%`;
@@ -542,7 +551,7 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
                 const prodKeys = Object.keys(p.products).sort();
                 return (
                   <React.Fragment key={pID}>
-                    <tr className="border-b border-gray-200">
+                    <tr className="border-b border-dashed border-gray-200">
                       <td className="border-r border-gray-200 bg-white align-middle" style={{ position: "sticky", left: 0, zIndex: 3, padding: "10px 12px 10px 16px" }}>
                         <div className="flex items-center gap-1.5">
                           <div className="w-[14px] h-[14px] rounded bg-blue-50 flex items-center justify-center flex-shrink-0">
@@ -667,7 +676,7 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
                   <div style={{ paddingLeft: "30px", display: "flex", flexDirection: "column", gap: "4px" }}>
                     {section.bullets.map((bullet, bi) => (
                       <div key={bi} className="flex items-start gap-2">
-                        <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#a78bfa", flexShrink: 0, marginTop: "6px" }}/>
+                        <span style={{ fontSize: "12px", lineHeight: 1.6, color: "#a78bfa", flexShrink: 0 }}>•</span>
                         <span style={{ fontSize: "12px", color: "#6b7280", lineHeight: 1.6 }}>{bullet}</span>
                       </div>
                     ))}
@@ -846,11 +855,11 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [historyTarget, setHistoryTarget]     = useState(null);  // { cID, cNm, country }
 
   const parseValue = useCallback((v) => {
-  const s = (v || "").toString().trim();
-  const isAcctNeg = s.startsWith("(") && s.endsWith(")");
-  const n = parseFloat(s.replace(/[^0-9.-]/g, "")) || 0;
-  return isAcctNeg ? -n : n;
-}, []);
+    const s = (v || "").toString().trim();
+    const isAcctNeg = s.startsWith("(") && s.endsWith(")");
+    const n = parseFloat(s.replace(/[^0-9.-]/g, "")) || 0;
+    return isAcctNeg ? -n : n;
+  }, []);
 
   const historyData = useMemo(() => {
     if (!historyTarget) return null;
@@ -933,41 +942,24 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   );
 
   /* ── Cascading valid sets ── */
-  const validForPartner = useMemo(() => {
-    const f = monthRows.filter(r =>
-      (!selCustomer.length || selCustomer.includes((r["Customer ID"] || "").trim())) &&
-      (!selProducts.length || selProducts.includes((r["Product"]     || "").trim())) &&
-      (!selCountry.length  || selCountry.includes((r["Country"]      || "").trim()))
-    );
-    return new Set(f.map(r => (r["Partner ID"] || "").trim()).filter(Boolean));
-  }, [monthRows, selCustomer, selProducts, selCountry]);
-
-  const validForCustomer = useMemo(() => {
-    const f = monthRows.filter(r =>
-      (!selPartner.length  || selPartner.includes((r["Partner ID"]   || "").trim())) &&
-      (!selProducts.length || selProducts.includes((r["Product"]     || "").trim())) &&
-      (!selCountry.length  || selCountry.includes((r["Country"]      || "").trim()))
-    );
-    return new Set(f.map(r => (r["Customer ID"] || "").trim()).filter(Boolean));
-  }, [monthRows, selPartner, selProducts, selCountry]);
-
-  const validForProduct = useMemo(() => {
-    const f = monthRows.filter(r =>
-      (!selPartner.length  || selPartner.includes((r["Partner ID"]   || "").trim())) &&
-      (!selCustomer.length || selCustomer.includes((r["Customer ID"] || "").trim())) &&
-      (!selCountry.length  || selCountry.includes((r["Country"]      || "").trim()))
-    );
-    return new Set(f.map(r => (r["Product"] || "").trim()).filter(Boolean));
-  }, [monthRows, selPartner, selCustomer, selCountry]);
-
-  const validForCountry = useMemo(() => {
-    const f = monthRows.filter(r =>
-      (!selPartner.length  || selPartner.includes((r["Partner ID"]   || "").trim())) &&
-      (!selCustomer.length || selCustomer.includes((r["Customer ID"] || "").trim())) &&
-      (!selProducts.length || selProducts.includes((r["Product"]     || "").trim()))
-    );
-    return new Set(f.map(r => (r["Country"] || "").trim()).filter(Boolean));
-  }, [monthRows, selPartner, selCustomer, selProducts]);
+  const validSets = useMemo(() => {
+    const partners = new Set(), customers = new Set(), products = new Set(), countries = new Set();
+    for (const r of monthRows) {
+      const pID     = (r["Partner ID"]  || "").trim();
+      const cID     = (r["Customer ID"] || "").trim();
+      const prod    = (r["Product"]     || "").trim();
+      const country = (r["Country"]     || "").trim();
+      const mP  = !selPartner.length  || selPartner.includes(pID);
+      const mC  = !selCustomer.length || selCustomer.includes(cID);
+      const mPr = !selProducts.length || selProducts.includes(prod);
+      const mCo = !selCountry.length  || selCountry.includes(country);
+      if (mC  && mPr && mCo && pID)     partners.add(pID);
+      if (mP  && mPr && mCo && cID)     customers.add(cID);
+      if (mP  && mC  && mCo && prod)    products.add(prod);
+      if (mP  && mC  && mPr && country) countries.add(country);
+    }
+    return { partners, customers, products, countries };
+  }, [monthRows, selPartner, selCustomer, selProducts, selCountry]);
 
   /* months valid for current non-month filters — computed over ALL rows */
   const validForMonth = useMemo(() => {
@@ -982,10 +974,12 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
 
   /* never allow an empty month selection — revert to most recent VALID month */
   const handleMonthsChange = useCallback((next) => {
-    if (next.length) { setSelMonths(next); return; }
-    const validList = sortedMonths.filter(m => validForMonth.has(m));
-    const fallback  = validForMonth.has(latestMonth) ? latestMonth : (validList[validList.length - 1] || latestMonth);
-    setSelMonths(fallback ? [fallback] : []);
+    startTransition(() => {
+      if (next.length) { setSelMonths(next); return; }
+      const validList = sortedMonths.filter(m => validForMonth.has(m));
+      const fallback  = validForMonth.has(latestMonth) ? latestMonth : (validList[validList.length - 1] || latestMonth);
+      setSelMonths(fallback ? [fallback] : []);
+    });
   }, [sortedMonths, validForMonth, latestMonth]);
 
   /* ── Filter options ── */
@@ -996,8 +990,8 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       if (id) all[id] = name || id;
     }
     return Object.entries(all).sort(([,a],[,b]) => a.localeCompare(b))
-      .map(([id, name]) => ({ value: id, label: name, disabled: !validForPartner.has(id) }));
-  }, [monthRows, validForPartner]);
+      .map(([id, name]) => ({ value: id, label: name, disabled: !validSets.partners.has(id) }));
+  }, [allRows, validSets]);
 
   const customerOptions = useMemo(() => {
     const all = {};
@@ -1006,18 +1000,18 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       if (id) all[id] = name || id;
     }
     return Object.entries(all).sort(([,a],[,b]) => a.localeCompare(b))
-      .map(([id, name]) => ({ value: id, label: name, disabled: !validForCustomer.has(id) }));
-  }, [monthRows, validForCustomer]);
+      .map(([id, name]) => ({ value: id, label: name, disabled: !validSets.customers.has(id) }));
+  }, [allRows, validSets]);
 
   const productOptions = useMemo(() => {
     const all = [...new Set(allRows.map(r => (r["Product"] || "").trim()).filter(Boolean))].sort();
-    return all.map(p => ({ value: p, label: p, disabled: !validForProduct.has(p) }));
-  }, [monthRows, validForProduct]);
+    return all.map(p => ({ value: p, label: p, disabled: !validSets.products.has(p) }));
+  }, [allRows, validSets]);
 
   const countryOptions = useMemo(() => {
     const all = [...new Set(allRows.map(r => (r["Country"] || "").trim()).filter(Boolean))].sort();
-    return all.map(c => ({ value: c, label: c, disabled: !validForCountry.has(c) }));
-  }, [monthRows, validForCountry]);
+    return all.map(c => ({ value: c, label: c, disabled: !validSets.countries.has(c) }));
+  }, [allRows, validSets]);
 
   /* ── Aggregate ── */
   const aggregate = useCallback((months, partnerFilter, customerFilter, prodFilter, countryFilter, totalsOnly = false) => {
@@ -1073,12 +1067,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     for (const row of allRows) {
       const cID     = (row["Customer ID"]  || "").trim();
       const country = (row["Country"]      || "").trim() || "Unknown";
-      const pNm     = (row["Partner Name"] || "").trim();
       const prod    = (row["Product"]      || "").trim();
       if (!cID) continue;
       if (!m[cID]) m[cID] = {};
-      if (!m[cID][country]) m[cID][country] = { partners: new Set(), products: new Set() };
-      if (pNm)  m[cID][country].partners.add(pNm);
+      if (!m[cID][country]) m[cID][country] = { products: new Set() };
       if (prod) m[cID][country].products.add(prod);
     }
     return m;
@@ -1099,7 +1091,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     return sortCol
       ? [...ids].sort((a, b) => {
           const ca = currentCustomers[a], cb = currentCustomers[b];
-          if (sortCol === "customer")  { const d = ca.name.toLowerCase().localeCompare(cb.name.toLowerCase()); return sortDir === "desc" ? d : -d; }
           let av, bv;
           if      (sortCol === "upsell")    { av = ca.upsell;     bv = cb.upsell;     }
           else if (sortCol === "crosssell") { av = ca.crosssell;  bv = cb.crosssell;  }
@@ -1496,6 +1487,7 @@ function App() {
         })).filter(r => r._reportingMonth);
 
         const unparsedDates = normalized.length - newRows.length;
+        totalSkipped += unparsedDates;
         if (unparsedDates > 0) console.warn("[CloudRe]", name, "— rows dropped, could not parse date value:", unparsedDates, "· Sample date values:", [...new Set(normalized.map(r => r["Date"]))].slice(0, 5));
 
         if (!newRows.length) {
