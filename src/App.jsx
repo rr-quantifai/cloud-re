@@ -517,7 +517,7 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
   const { months, partners } = data;
   const partnerIDs = Object.keys(partners).sort((a, b) => partners[a].name.localeCompare(partners[b].name));
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white rounded-2xl overflow-hidden flex flex-col" style={{ width: MODAL_W, maxHeight: MODAL_H }}>
 
         {/* Header */}
@@ -533,10 +533,6 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
               <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
             </svg>
             Ask AI
-          </button>
-          <button onClick={onClose} aria-label="Close"
-            className="ml-auto w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition flex-shrink-0">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
 
@@ -608,7 +604,7 @@ const HistoryModal = ({ open, customerName, country, data, onClose, onAskAI }) =
 /* ═══════════════════════════════════════════════════════════════════
    AI INSIGHTS MODAL
    ═══════════════════════════════════════════════════════════════════ */
-const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading, content, failed }) => {
+const AIInsightsModal = ({ open, customerName, onClose, onBackdropClick, onAnalyzeAgain, loading, content, failed }) => {
   if (!open) return null;
   
   const parseContent = (text) => {
@@ -642,7 +638,7 @@ const AIInsightsModal = ({ open, customerName, onClose, onAnalyzeAgain, loading,
     : [customerName, null];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "#0f0f0f" }} onClick={e => { if (e.target === e.currentTarget) onBackdropClick(); }}>
       <div className="bg-white rounded-2xl overflow-hidden" style={{ width: "560px", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
 
         {/* Header */}
@@ -753,18 +749,9 @@ const UploadModal = ({ uploadState, handleUpload, hasData, onClose, fileRef }) =
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
+      onClick={e => { if (e.target === e.currentTarget && hasData && st !== "uploading") onClose(); }}
     >
       <div className="bg-white rounded-2xl relative" style={{ width: "340px", padding: "40px 32px 32px" }}>
-
-        {hasData && st !== "uploading" && (
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="absolute top-3.5 right-3.5 w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        )}
 
         <div className="flex flex-col items-center text-center gap-4">
 
@@ -1332,6 +1319,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
         open={aiModalOpen}
         customerName={aiCustomerName}
         onClose={() => setAIModalOpen(false)}
+        onBackdropClick={() => { setAIModalOpen(false); setHistoryTarget(null); }}
         onAnalyzeAgain={onAnalyzeAgain}
         loading={aiLoading}
         content={aiContent}
