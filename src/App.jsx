@@ -5,6 +5,7 @@ import Papa from "papaparse";
    PERSISTENT STORAGE — IndexedDB
    ═══════════════════════════════════════════════════════════════════ */
 let idb = null;
+
 const getIDB = () => {
   if (idb) return idb;
   idb = new Promise((res, rej) => {
@@ -15,18 +16,21 @@ const getIDB = () => {
   });
   return idb;
 };
+
 const psGet = async (k) => {
   try {
     const db = await getIDB();
     return new Promise(r => { const req = db.transaction("kv","readonly").objectStore("kv").get(k); req.onsuccess = () => r(req.result ?? null); req.onerror = () => r(null); });
   } catch { return null; }
 };
+
 const psSet = async (k, v) => {
   try {
     const db = await getIDB();
     return new Promise(r => { const tx = db.transaction("kv","readwrite"); tx.objectStore("kv").put(v, k); tx.oncomplete = () => r(); tx.onerror = () => r(); });
   } catch {}
 };
+
 const psDel = async (k) => {
   try {
     const db = await getIDB();
@@ -79,6 +83,7 @@ const fmtMonthKey = (ym) => {
 };
 
 const getFY      = (ym) => { const [y, m] = ym.split("-").map(Number); return m >= 4 ? y + 1 : y; };
+
 const getFYLabel = (fy) => `FY${String(fy).slice(2)}`;
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -87,15 +92,20 @@ const getFYLabel = (fy) => `FY${String(fy).slice(2)}`;
 const REQUIRED_COLS = ["custid", "EndCustomer", "InvoiceDate", "amount", "SubscriptionName", "partnername", "storeid"];
 
 const extractPartnerName = (v) => { const s = (v||"").trim(); const i = s.indexOf("~"); return i !== -1 ? s.slice(i+1).trim() : s; };
+
 const extractPartnerID   = (v) => { const s = (v||"").trim(); const i = s.indexOf("~"); return i !== -1 ? s.slice(0,i).trim() : ""; };
+
 const extractCountry     = (v) => { const s = (v||"").trim(); const i = s.indexOf("-"); return i !== -1 ? s.slice(0,i).trim() : s; };
+
 const parseValue = (v) => {
   const s = (v || "").toString().trim();
   const isAcctNeg = s.startsWith("(") && s.endsWith(")");
   const n = parseFloat(s.replace(/[^0-9.-]/g, "")) || 0;
   return isAcctNeg ? -n : n;
 };
+
 const PAGE_SIZE = 25;
+
 const MIN_DESKTOP = 1024;
 
 const PRODUCT_PALETTE = [
@@ -368,8 +378,7 @@ const KPICards = ({ totals, priorTotals }) => {
           const label = yoyLabel(curr, prior, isPct);
           return (
             <div key={key} className={`flex items-center gap-1.5 px-4 ${ROW_H} ${i < 4 ? COL_BORDER : ""}`}>
-              <span className="text-[12px] font-semibold" style={{ fontFamily: "var(--font-mono, monospace)", color, letterSpacing: "-.01em" }}>{label}</span>
-              {label !== "—" && <span className="text-[10px] text-gray-400">YoY</span>}
+              <span className="text-[12px] font-semibold font-mono" style={{ color, letterSpacing: "-.01em" }}>{label}</span>
             </div>
           );
         })}
@@ -513,31 +522,37 @@ const FYMonthFilter = ({ values, onChange, allMonths, validMonths }) => {
 };
 
 const fmtVal    = (v) => (v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+
 const fmtPct    = (v) => (v || 0).toFixed(1) + "%";
+
 const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total) * 100 : 0;
+
 const GRID      = "250px 85px 85px 85px 85px 85px 85px 85px";
+
 const GAP       = { gap: "16px", justifyContent: "space-between" };
 
 const SortTh = ({ col, label, right = false, sortCol, sortDir, onSort }) => (
-  <span className={"cursor-pointer select-none hover:text-gray-700 transition text-xs uppercase tracking-wider font-medium whitespace-nowrap inline-flex items-center gap-1 " + (right ? "justify-end w-full" : "")}
+  <span className={"cursor-pointer select-none hover:text-gray-700 transition text-xs uppercase tracking-wider font-medium whitespace-nowrap " + (right ? "flex justify-end w-full" : "")}
     onClick={() => onSort(col)} style={{ color: sortCol === col ? "#1d4ed8" : "#9ca3af" }}>
-    {label}
-    {sortCol === col && (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={"flex-shrink-0 " + (sortDir === "asc" ? "rotate-180" : "")}><path d="M6 9l6 6 6-6"/></svg>
-    )}
+    {sortCol === col && (sortDir === "asc" ? "↑ " : "↓ ")}{label}
   </span>
 );
 
 const IDBadge  = ({ id })    => <span className="inline-block px-1.5 py-px text-[10px] font-medium rounded border border-gray-200 bg-gray-50 text-gray-400 flex-shrink-0">{id}</span>;
+
 const CntBadge = ({ label }) => <span className="inline-block px-1.5 py-px text-[10px] rounded border border-slate-200 bg-slate-100 text-slate-500 flex-shrink-0">{label}</span>;
+
 const Dash     = ()          => <span className="text-gray-200 text-xs">—</span>;
 
 /* ═══════════════════════════════════════════════════════════════════
    HISTORY MODAL
    ═══════════════════════════════════════════════════════════════════ */
 const MODAL_W   = "560px";
+
 const MODAL_H   = "80vh";
+
 const TYPE_DOTS = { new: "#7c3aed", upsell: "#16a34a", crosssell: "#2563eb" };
+
 const TYPE_LABELS = [["new","New"],["upsell","Upsell"],["crosssell","Cross-sell"]];
 
 const HistoryCell = ({ cell }) => {
@@ -1236,7 +1251,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap, csvCount }) => {
   const metaRow = (
     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
       <div className="flex items-center gap-3 text-xs text-gray-500">
-        <span>{csvCount.toLocaleString()} CSV{csvCount !== 1 ? "s" : ""} uploaded</span>
+        <span>{csvCount.toLocaleString()} file{csvCount !== 1 ? "s" : ""} uploaded</span>
         <span className="text-gray-300 text-xs select-none">|</span>
         <span>{allRows.length.toLocaleString()} rows imported</span>
       </div>
@@ -1294,7 +1309,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap, csvCount }) => {
               onLeaderboardToggle={() => { if (lbDimension === "product") { setLbDimension(null); } else { setLbDimension("product"); setSelCustomer([]); setSelPartner([]); setSelProducts([]); setSelCountry([]); setPartnerPage(0); } }}
             />
           </div>
-          <button onClick={resetAll} disabled={!hasFilters} className={"h-[36px] px-3 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>Reset filters</button>
+          <button onClick={resetAll} disabled={!hasFilters} className={"h-[36px] px-3 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>Reset Filters</button>
         </div>
       </div>
 
@@ -1493,15 +1508,15 @@ const TrackerView = ({ allRows, sortedMonths, typeMap, csvCount }) => {
                   ["Next",  () => setPartnerPage(p => Math.min(totalPartnerPages - 1, p + 1)), safePartnerPage >= totalPartnerPages - 1],
                   null,
                   ["Last",  () => setPartnerPage(totalPartnerPages - 1),                        safePartnerPage >= totalPartnerPages - 1],
-                ].map((item, i) =>
+                ].map((item, i, arr) =>
                   item === null
                     ? <span key={i} className="text-gray-300 mx-1">·</span>
                     : item[1]
                       ? <button key={i} onClick={() => { item[1](); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); }} disabled={item[2]}
-                          className={"px-2 py-1 text-xs font-medium transition " + (item[2] ? "text-gray-300 cursor-not-allowed" : "text-gray-500 hover:text-gray-700")}>
+                          className={(i === arr.length - 1 ? "pl-2 pr-0" : "px-2") + " text-xs font-medium transition " + (item[2] ? "text-gray-300 cursor-not-allowed" : "text-gray-500 hover:text-gray-700")}>
                           {item[0]}
                         </button>
-                      : <span key={i} className="px-2 py-1 text-xs font-medium text-gray-500">{item[0]}</span>
+                      : <span key={i} className="px-2 text-xs font-medium text-gray-500">{item[0]}</span>
                 )}
               </div>
             )}
