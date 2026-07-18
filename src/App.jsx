@@ -846,6 +846,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [aiFailed, setAIFailed]               = useState(false);
   const [sortCol, setSortCol]                 = useState(null);
   const [historyTarget, setHistoryTarget]     = useState(null);  // { cID, cNm, country }
+  const [leaderboardMode, setLeaderboardMode] = useState(false);
+  const [lbDimension, setLbDimension]         = useState("customer");
+  const [lbSortCol, setLbSortCol]             = useState("total");
+  const [lbSortDir, setLbSortDir]             = useState("desc");
 
   const historyData = useMemo(() => {
     if (!historyTarget) return null;
@@ -1066,6 +1070,78 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     return m;
   }, [allRows]);
 
+  /* ── Leaderboard ── */
+  const LB_DIM_LABELS = { customer: "customers", country: "countries", partner: "partners", product: "products" };
+
+  const lbData = useMemo(() => {
+    if (!leaderboardMode) return null;
+    const rows = allRows.filter(r => effectiveMonths.includes(r._reportingMonth));
+    const byCustomer = {}, byCountry = {}, byPartner = {}, byProduct = {};
+    const custIDs = new Set(), ctries = new Set(), partIDs = new Set(), prods = new Set();
+    for (const row of rows) {
+      const cID     = (row["Customer ID"]   || "").trim();
+      const cNm     = (row["Customer Name"] || "").trim() || "Unknown Customer";
+      const country = (row["Country"]       || "").trim() || "Unknown";
+      const pID     = (row["Partner ID"]    || "").trim();
+      const pNm     = (row["Partner Name"]  || "").trim() || "Unknown Partner";
+      const prod    = (row["Product"]       || "").trim() || "Blank";
+      const val     = row["Value"];
+      const type    = typeMap[row._id] || "new";
+      if (cID) custIDs.add(cID);
+      ctries.add(country);
+      if (pID) partIDs.add(pID);
+      prods.add(prod);
+      if (cID) {
+        if (!byCustomer[cID]) byCustomer[cID] = { name: cNm, id: cID, new: 0, upsell: 0, crosssell: 0, total: 0 };
+        byCustomer[cID][type] += val; byCustomer[cID].total += val;
+      }
+      if (!byCountry[country]) byCountry[country] = { name: country, new: 0, upsell: 0, crosssell: 0, total: 0 };
+      byCountry[country][type] += val; byCountry[country].total += val;
+      if (pID) {
+        if (!byPartner[pID]) byPartner[pID] = { name: pNm, id: pID, new: 0, upsell: 0, crosssell: 0, total: 0 };
+        byPartner[pID][type] += val; byPartner[pID].total += val;
+      }
+      if (!byProduct[prod]) byProduct[prod] = { name: prod, new: 0, upsell: 0, crosssell: 0, total: 0 };
+      byProduct[prod][type] += val; byProduct[prod].total += val;
+    }
+    return {
+      byCustomer, byCountry, byPartner, byProduct,
+      counts: { customer: custIDs.size, country: ctries.size, partner: partIDs.size, product: prods.size },
+    };
+  }, [leaderboardMode, allRows, effectiveMonths, typeMap]);
+
+  const lbRows = useMemo(() => {
+    if (!lbData) return [];
+    const map = { customer: lbData.byCustomer, country: lbData.byCountry, partner: lbData.byPartner, product: lbData.byProduct }[lbDimension];
+    const getSortVal = (r) => lbSortCol === "new" ? r.new : lbSortCol === "upsell" ? r.upsell : lbSortCol === "crosssell" ? r.crosssell : lbSortCol === "recap" ? recapRate(r) : r.total;
+    const sorted = Object.values(map).sort((a, b) => lbSortDir === "desc" ? getSortVal(b) - getSortVal(a) : getSortVal(a) - getSortVal(b));
+    return lbDimension === "country" ? sorted : sorted.slice(0, 10);
+  }, [lbData, lbDimension, lbSortCol, lbSortDir]);
+
+  const toggleLbSort = useCallback((col) => {
+    if (lbSortCol === col) { if (lbSortDir === "desc") setLbSortDir("asc"); else { setLbSortCol("total"); setLbSortDir("desc"); } }
+    else { setLbSortCol(col); setLbSortDir("desc"); }
+  }, [lbSortCol, lbSortDir]);
+
+  const lbSortLabel = { new: "New", upsell: "Upsell", crosssell: "Cross-sell", total: "Total", recap: "Recapture" }[lbSortCol] || "Total";
+
+  const resetLbFilters = useCallback(() => {
+    setSelMonths(latestMonth ? [latestMonth] : []);
+    setLbSortCol("total");
+    setLbSortDir("desc");
+  }, [latestMonth]);
+
+  const exitLeaderboard = useCallback(() => {
+    setLeaderboardMode(false);
+    setLbDimension("customer");
+    setLbSortCol("total");
+    setLbSortDir("desc");
+    setSelMonths(latestMonth ? [latestMonth] : []);
+    setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
+    setSortCol(null); setSortDir("desc");
+    setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0);
+  }, [latestMonth]);
+
   const toggleSort = useCallback((col) => {
     if (sortCol === col) { if (sortDir === "desc") setSortDir("asc"); else { setSortCol(null); setSortDir("desc"); } }
     else { setSortCol(col); setSortDir("desc"); }
@@ -1114,20 +1190,97 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       {/* Filter bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2">
-          <FYMonthFilter values={selMonths} onChange={handleMonthsChange} allMonths={sortedMonths} validMonths={validForMonth} />
-          <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }}              options={customerOptions} placeholder="Customer" searchable/></div>
-          <div className="flex-1 min-w-0"><MultiSel values={selCountry}  onChange={setSelCountry}                                               options={countryOptions}  placeholder="Country"/></div>
-          <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v);  setPartnerPage(0); }}              options={partnerOptions}  placeholder="Partner"  searchable/></div>
-          <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts}                                              options={productOptions}  placeholder="Product"/></div>
-          <button onClick={resetAll} disabled={!hasFilters}
-            className={"h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>
-            Reset All Filters
+          <FYMonthFilter values={selMonths} onChange={handleMonthsChange} allMonths={sortedMonths} validMonths={leaderboardMode ? undefined : validForMonth} />
+          {leaderboardMode ? (
+            <>
+              {[["customer","Customers"],["country","Countries"],["partner","Partners"],["product","Products"]].map(([key, label]) => (
+                <button key={key} onClick={() => setLbDimension(key)}
+                  className={"h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 " + (lbDimension === key ? "bg-blue-50 text-blue-600 border-blue-400" : "text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50")}>
+                  {label}
+                </button>
+              ))}
+              <button onClick={resetLbFilters} className="h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap text-red-500 border-red-200 hover:bg-red-50">
+                Reset Filters
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }}              options={customerOptions} placeholder="Customer" searchable/></div>
+              <div className="flex-1 min-w-0"><MultiSel values={selCountry}  onChange={setSelCountry}                                               options={countryOptions}  placeholder="Country"/></div>
+              <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v);  setPartnerPage(0); }}              options={partnerOptions}  placeholder="Partner"  searchable/></div>
+              <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts}                                              options={productOptions}  placeholder="Product" searchable/></div>
+              <button onClick={resetAll} disabled={!hasFilters}
+                className={"h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>
+                Reset All Filters
+              </button>
+            </>
+          )}
+          <button onClick={() => { leaderboardMode ? exitLeaderboard() : setLeaderboardMode(true); }}
+            className={"h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (leaderboardMode ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700" : "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100")}>
+            See Leaderboard
           </button>
         </div>
       </div>
 
       {/* Table */}
-      {customerNames.length === 0
+      {leaderboardMode ? (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {/* Meta row */}
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+              <span>
+                {lbDimension === "country" ? `All ${lbData?.counts.country ?? 0} countries` : `Top 10 ${LB_DIM_LABELS[lbDimension]}`}
+                {lbDimension !== "country" && lbData && ` · ${lbData.counts[lbDimension].toLocaleString()} total`}
+                {` · ${selMonths.length === 1 ? fmtMonthKey(selMonths[0]) : `${selMonths.length} months`}`}
+              </span>
+            </div>
+            <span className="text-xs text-gray-400">Sorted by <span className="font-medium text-gray-600">{lbSortLabel}</span></span>
+          </div>
+          {/* Column headers */}
+          <div className="grid items-center px-4 py-2.5 bg-gray-50 border-b border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
+            <span/><span/><span/>
+            <SortTh col="new"       label="New"        sortCol={lbSortCol} onSort={toggleLbSort} right/>
+            <SortTh col="upsell"    label="Upsell"     sortCol={lbSortCol} onSort={toggleLbSort} right/>
+            <SortTh col="crosssell" label="Cross-sell" sortCol={lbSortCol} onSort={toggleLbSort} right/>
+            <SortTh col="total"     label="Total"      sortCol={lbSortCol} onSort={toggleLbSort} right/>
+            <SortTh col="recap"     label="Recapture"  sortCol={lbSortCol} onSort={toggleLbSort} right/>
+          </div>
+          {/* Rows */}
+          {lbRows.map((row, i) => {
+            const rate   = recapRate(row);
+            const showId = lbDimension === "customer" || lbDimension === "partner";
+            const outOf  = (lbData?.counts[lbDimension] ?? 0).toLocaleString();
+            return (
+              <div key={row.id || row.name} className={i > 0 ? "border-t border-gray-200" : ""}>
+                <div className="grid items-center px-4 py-3" style={{gridTemplateColumns: GRID, ...GAP}}>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className={"w-[18px] h-[18px] rounded flex items-center justify-center flex-shrink-0 " + (lbDimension === "customer" ? "bg-emerald-50" : lbDimension === "country" ? "bg-orange-50" : lbDimension === "partner" ? "bg-blue-50" : "bg-violet-50")}>
+                      {lbDimension === "customer" && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>}
+                      {lbDimension === "country"  && <svg width="9"  height="9"  viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>}
+                      {lbDimension === "partner"  && <svg width="9"  height="9"  viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"/></svg>}
+                      {lbDimension === "product"  && <svg width="9"  height="9"  viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>}
+                    </div>
+                    <span className="text-xs font-medium text-gray-800 truncate" title={row.name}>{row.name}</span>
+                    {showId && row.id && <IDBadge id={row.id}/>}
+                  </div>
+                  <div className="flex items-center justify-end">
+                    <span className={"inline-block px-1.5 py-px text-[10px] rounded border flex-shrink-0 font-medium " + (i === 0 ? "bg-amber-50 text-amber-700 border-amber-200" : i < 3 ? "bg-slate-100 text-slate-500 border-slate-200" : "bg-gray-50 text-gray-400 border-gray-200")}>#{i + 1}</span>
+                  </div>
+                  <div className="flex items-center justify-end">
+                    <span className="inline-block px-1.5 py-px text-[10px] rounded border border-gray-200 bg-gray-50 text-gray-400 flex-shrink-0 whitespace-nowrap">of {outOf}</span>
+                  </div>
+                  <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(row.new)}</span>
+                  <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(row.upsell)}</span>
+                  <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(row.crosssell)}</span>
+                  <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(row.total)}</span>
+                  <span className="text-xs font-medium text-gray-900 text-right">{fmtPct(rate)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : customerNames.length === 0
         ? <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <p className="text-sm text-gray-500">No data for selected filters</p>
           </div>
