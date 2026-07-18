@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback, useEffect, useDeferredValue } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import Papa from "papaparse";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -215,7 +215,7 @@ const useOutsideClose = (ref, open, setOpen) => {
   }, [open]);
 };
 
-const MultiSel = ({ values, onChange, options, placeholder, searchable = false }) => {
+const MultiSel = ({ values, onChange, options, placeholder, searchable = false, leaderboardLabel, leaderboardActive = false, onLeaderboardToggle, disabled = false }) => {
   const [open, setOpen]               = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const ref       = useRef(null);
@@ -223,11 +223,10 @@ const MultiSel = ({ values, onChange, options, placeholder, searchable = false }
   useOutsideClose(ref, open, setOpen);
   useEffect(() => {
     if (!open) { setSearchQuery(""); return; }
-    if (searchable && searchRef.current) setTimeout(() => searchRef.current?.focus(), 0);
-  }, [open, searchable]);
+    if (searchable && !leaderboardActive && searchRef.current) setTimeout(() => searchRef.current?.focus(), 0);
+  }, [open, searchable, leaderboardActive]);
   const toggle   = (v) => { const o = options.find(x => (typeof x === "object" ? x.value : ""+x) === v); if (o?.disabled && !values.includes(v)) return; onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v]); };
   const getLabel = (v) => { const o = options.find(x => (typeof x === "object" ? x.value : ""+x) === v); return typeof o === "object" ? o.label : o != null ? ""+o : v; };
-  const dis      = options.length === 0;
   const visible  = searchable && searchQuery.trim()
     ? options.filter(o => {
         const l = typeof o === "object" ? o.label : ""+o;
@@ -236,20 +235,35 @@ const MultiSel = ({ values, onChange, options, placeholder, searchable = false }
         return l.toLowerCase().includes(q) || v.toLowerCase().includes(q);
       })
     : options;
-  const displayLabel = values.length === 0 ? (placeholder||"All") : values.length === 1 ? getLabel(values[0]) : "Multiple selections";
+  const isActive     = leaderboardActive || values.length > 0;
+  const displayLabel = leaderboardActive ? leaderboardLabel : (values.length === 0 ? (placeholder||"All") : values.length === 1 ? getLabel(values[0]) : "Multiple selections");
   return (
     <div ref={ref} className="relative">
       <div
-        onClick={() => !dis && setOpen(!open)}
-        className={"w-full px-2.5 py-1.5 text-sm border rounded-lg bg-white h-[36px] flex items-center gap-1 " + (dis ? "opacity-50 cursor-not-allowed border-gray-200" : values.length > 0 ? "cursor-pointer border-blue-400 hover:border-blue-500" : "cursor-pointer border-gray-200 hover:border-blue-300")}
+        onClick={() => !disabled && setOpen(!open)}
+        className={"w-full px-2.5 py-1.5 text-sm border rounded-lg bg-white h-[36px] flex items-center gap-1 " + (disabled ? "opacity-50 cursor-not-allowed border-gray-200" : isActive ? "cursor-pointer border-blue-400 hover:border-blue-500" : "cursor-pointer border-gray-200 hover:border-blue-300")}
       >
-        <span className={"flex-1 min-w-0 truncate " + (values.length > 0 ? "text-blue-600" : "text-gray-400")} title={values.length === 1 ? getLabel(values[0]) : undefined}>{displayLabel}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={"flex-shrink-0 transition-transform " + (open ? "rotate-180" : "") + " " + (values.length > 0 ? "text-blue-400" : "text-gray-400")}><path d="M6 9l6 6 6-6"/></svg>
+        <span className={"flex-1 min-w-0 truncate " + (isActive ? "text-blue-600" : "text-gray-400")} title={values.length === 1 && !leaderboardActive ? getLabel(values[0]) : undefined}>{displayLabel}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={"flex-shrink-0 transition-transform " + (open ? "rotate-180" : "") + " " + (isActive ? "text-blue-400" : "text-gray-400")}><path d="M6 9l6 6 6-6"/></svg>
       </div>
-      {open && !dis && (
+      {open && !disabled && (
         <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 overflow-hidden">
+          {leaderboardLabel && (
+            <>
+              <div onClick={onLeaderboardToggle} className={"px-3 py-2.5 text-xs flex items-center justify-between cursor-pointer " + (leaderboardActive ? "bg-blue-50" : "hover:bg-gray-50")}>
+                <div className={"flex items-center gap-1.5 font-medium " + (leaderboardActive ? "text-blue-600" : "text-gray-500")}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+                  View Leaderboard
+                </div>
+                <div className={"w-7 h-4 rounded-full relative flex-shrink-0 transition-colors " + (leaderboardActive ? "bg-blue-600" : "bg-gray-200")}>
+                  <div className={"absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all " + (leaderboardActive ? "left-3.5" : "left-0.5")}/>
+                </div>
+              </div>
+              <div className="border-b border-gray-100"/>
+            </>
+          )}
           {searchable && (
-            <div className="p-2 border-b border-gray-100">
+            <div className={"p-2 border-b border-gray-100 " + (leaderboardActive ? "opacity-35 pointer-events-none" : "")}>
               <div className={"flex items-center gap-1.5 h-7 px-2 rounded-md border bg-gray-50 " + (searchQuery ? "border-blue-300" : "border-gray-200")}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={searchQuery ? "#2563eb" : "#9ca3af"} strokeWidth="2.5" className="flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                 <input ref={searchRef} type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search…" className={"flex-1 min-w-0 text-xs bg-transparent focus:outline-none placeholder-gray-400 " + (searchQuery ? "text-blue-600" : "text-gray-700")} onClick={e => e.stopPropagation()}/>
@@ -257,7 +271,7 @@ const MultiSel = ({ values, onChange, options, placeholder, searchable = false }
               </div>
             </div>
           )}
-          <div className="max-h-52 overflow-y-auto divide-y divide-gray-100">
+          <div className={"max-h-52 overflow-y-auto divide-y divide-gray-100 " + (leaderboardActive ? "opacity-35 pointer-events-none" : "")}>
             {visible.length === 0
               ? <div className="px-3 py-3 text-xs text-gray-400">No matches</div>
               : visible.map(o => {
@@ -282,76 +296,94 @@ const MultiSel = ({ values, onChange, options, placeholder, searchable = false }
   );
 };
 
-const KPI_ICONS = {
-  upsell:    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
-  crosssell: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M17 4l4 4-4 4M7 20l-4-4 4-4M3 8h18M3 16h18"/></svg>,
-  new:       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M12 3l1.8 5.4L19 9l-5.2 4 2 5.8L12 15.6 8.2 18.8l2-5.8L5 9l5.2-.6L12 3z"/></svg>,
-  recapture: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2"><path d="M20 11A8.1 8.1 0 004.5 9M4 5v4h4M4 13a8.1 8.1 0 0015.5 2M20 17v-4h-4"/></svg>,
-  total:     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><path d="M18 16v2a1 1 0 01-1 1H7l6-7-6-7h10a1 1 0 011 1v2"/></svg>,
-};
-
-const KPI_CONFIG = [
-  { key: "new",       label: "New",        iconEl: KPI_ICONS.new,       border: "#7c3aed", iconBg: "#f5f3ff", pill: { bg: "#f5f3ff", text: "#4c1d95", border: "#ddd6fe" } },
-  { key: "upsell",    label: "Upsell",     iconEl: KPI_ICONS.upsell,    border: "#10b981", iconBg: "#f0fdf4", pill: { bg: "#f0fdf4", text: "#166534", border: "#bbf7d0" } },
-  { key: "crosssell", label: "Cross-sell", iconEl: KPI_ICONS.crosssell, border: "#3b82f6", iconBg: "#eff6ff", pill: { bg: "#eff6ff", text: "#1e40af", border: "#bfdbfe" } },
-  { key: "recapture", label: "Recapture",  iconEl: KPI_ICONS.recapture, border: "#d97706", iconBg: "#fffbeb", pill: null },
-  { key: "total",     label: "Total",      iconEl: KPI_ICONS.total,     border: "#6b7280", iconBg: "#f9fafb", pill: null },
-];
-
 /* ═══════════════════════════════════════════════════════════════════
    KPI CARDS
    ═══════════════════════════════════════════════════════════════════ */
-const ChangeChip = ({ curr, prior, isPct = false }) => {
-  const neutral = "inline-flex text-[10px] font-medium px-1.5 py-px rounded-full flex-shrink-0 border bg-slate-100 text-slate-400 border-slate-200";
-  if (prior == null || (!isPct && prior === 0)) return <span className={neutral}>—</span>;
-  const delta = isPct ? curr - prior : ((curr - prior) / Math.abs(prior)) * 100;
-  if (Math.abs(delta) < 0.05) return <span className={neutral}>—</span>;
-  const pos   = delta >= 0;
-  const label = isPct ? `${Math.abs(delta).toFixed(1)}pp` : `${Math.abs(delta).toFixed(1)}%`;
-  return (
-    <span className={"inline-flex text-[10px] font-medium px-1.5 py-px rounded-full flex-shrink-0 border " + (pos ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-800 border-red-200")}>
-      {pos ? "↑" : "↓"} {label}
-    </span>
-  );
-};
-
-const KPICards = ({ totals, priorTotals, displayMode }) => {
-  const total = Math.max(totals.total, 1);
+const KPICards = ({ totals, priorTotals }) => {
+  const total     = Math.max(totals.total, 1);
   const currRate  = recapRate(totals);
   const priorRate = priorTotals ? recapRate(priorTotals) : null;
-  const pctVal    = (v) => fmtPct(total > 0 ? (v / total) * 100 : 0);
 
-  const dynamic = {
-    upsell:    { pct: Math.round((totals.upsell    / total) * 100), val: displayMode === "%" ? pctVal(totals.upsell)    : fmtVal(totals.upsell),    curr: totals.upsell,    prior: priorTotals?.upsell    ?? null, isPct: false },
-    crosssell: { pct: Math.round((totals.crosssell / total) * 100), val: displayMode === "%" ? pctVal(totals.crosssell) : fmtVal(totals.crosssell), curr: totals.crosssell, prior: priorTotals?.crosssell ?? null, isPct: false },
-    new:       { pct: Math.round((totals.new       / total) * 100), val: displayMode === "%" ? pctVal(totals.new)       : fmtVal(totals.new),       curr: totals.new,       prior: priorTotals?.new       ?? null, isPct: false },
-    recapture: { pct: null,                     val: fmtPct(currRate),                                                     curr: currRate,             prior: priorRate,                                      isPct: true  },
-    total:     { pct: null,                     val: displayMode === "%" ? "100.0%"                 : fmtVal(totals.total), curr: totals.total,         prior: priorTotals?.total     ?? null, isPct: false },
+  const COLS = [
+    { key: "new",       label: "New",        accent: "#7c3aed", pill: { bg: "#f5f3ff", text: "#4c1d95", border: "#ddd6fe" }, pct: Math.round((totals.new       / total) * 100), val: fmtVal(totals.new),       curr: totals.new,       prior: priorTotals?.new       ?? null, isPct: false },
+    { key: "upsell",    label: "Upsell",     accent: "#10b981", pill: { bg: "#f0fdf4", text: "#166534", border: "#bbf7d0" }, pct: Math.round((totals.upsell    / total) * 100), val: fmtVal(totals.upsell),    curr: totals.upsell,    prior: priorTotals?.upsell    ?? null, isPct: false },
+    { key: "crosssell", label: "Cross-sell", accent: "#3b82f6", pill: { bg: "#eff6ff", text: "#1e40af", border: "#bfdbfe" }, pct: Math.round((totals.crosssell / total) * 100), val: fmtVal(totals.crosssell), curr: totals.crosssell, prior: priorTotals?.crosssell ?? null, isPct: false },
+    { key: "recapture", label: "Recapture",  accent: "#d97706", pill: null, pct: null, val: fmtPct(currRate),      curr: currRate,       prior: priorRate,                      isPct: true  },
+    { key: "total",     label: "Total",      accent: "#6b7280", pill: null, pct: null, val: fmtVal(totals.total), curr: totals.total,   prior: priorTotals?.total     ?? null, isPct: false },
+  ];
+
+  const yoyColor  = (curr, prior, isPct) => {
+    if (prior == null || (!isPct && prior === 0)) return "#9ca3af";
+    const delta = isPct ? curr - prior : ((curr - prior) / Math.abs(prior)) * 100;
+    if (Math.abs(delta) < 0.05) return "#9ca3af";
+    return delta > 0 ? "#16a34a" : "#dc2626";
   };
-  const CARDS = KPI_CONFIG.map(cfg => ({ ...cfg, ...dynamic[cfg.key] }));
+
+  const yoyLabel  = (curr, prior, isPct) => {
+    if (prior == null || (!isPct && prior === 0)) return "—";
+    const delta = isPct ? curr - prior : ((curr - prior) / Math.abs(prior)) * 100;
+    if (Math.abs(delta) < 0.05) return "—";
+    const arrow = delta > 0 ? "↑" : "↓";
+    return isPct ? `${arrow}${Math.abs(delta).toFixed(1)}pp` : `${arrow}${Math.abs(delta).toFixed(1)}%`;
+  };
+
+  const barNew = totals.new       / total;
+  const barUp  = totals.upsell    / total;
+  const barCs  = totals.crosssell / total;
+
+  const COL_BORDER = "border-r border-gray-200";
+  const ROW_H      = "h-[36px]";
 
   return (
-    <div className="grid mb-6" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: "8px" }}>
-      {CARDS.map(({ key, label, iconEl, border, iconBg, pill, pct, val, curr, prior, isPct }) => (
-        <div key={key} className="bg-white rounded-xl border border-gray-200" style={{ borderLeft: `3px solid ${border}`, padding: "13px 13px 12px" }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <div className="w-[22px] h-[22px] rounded-md flex items-center justify-center flex-shrink-0" style={{ background: iconBg }}>
-                {iconEl}
-              </div>
-              <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{label}</span>
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+
+      {/* Row 1 — Labels + % pills */}
+      <div className="grid border-b border-gray-100 bg-gray-50" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        {COLS.map(({ key, label, accent, pill, pct }, i) => (
+          <div key={key} className={`flex items-center justify-between px-4 ${ROW_H} ${i < 4 ? COL_BORDER : ""}`}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: accent }}/>
+              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">{label}</span>
             </div>
-            {pill && pct != null && displayMode !== "%" && (
-              <span className="text-[10px] font-medium px-1.5 py-px rounded-full border flex-shrink-0 ml-1" style={{ background: pill.bg, color: pill.text, borderColor: pill.border }}>{pct}%</span>
+            {pill && pct != null && (
+              <span className="text-[10px] font-medium px-1.5 py-px rounded-full border flex-shrink-0" style={{ background: pill.bg, color: pill.text, borderColor: pill.border }}>{pct}%</span>
             )}
           </div>
-          <div className="text-lg font-medium text-gray-900 tracking-tight mb-2.5">{val}</div>
-          <div className="flex items-center gap-1.5">
-            <ChangeChip curr={curr} prior={prior} isPct={isPct}/>
-            {prior != null && <span className="text-[10px] text-gray-400">vs. prior year</span>}
+        ))}
+      </div>
+
+      {/* Row 2 — Main values */}
+      <div className="grid border-b border-dashed border-gray-200" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        {COLS.map(({ key, accent, val }, i) => (
+          <div key={key} className={`flex items-center px-4 h-[52px] ${i < 4 ? COL_BORDER : ""}`} style={{ borderTop: `3px solid ${accent}` }}>
+            <span className="text-[26px] font-medium text-gray-900" style={{ letterSpacing: "-0.03em", lineHeight: 1 }}>{val}</span>
           </div>
+        ))}
+      </div>
+
+      {/* Row 3 — YoY */}
+      <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        {COLS.map(({ key, curr, prior, isPct }, i) => {
+          const color = yoyColor(curr, prior, isPct);
+          const label = yoyLabel(curr, prior, isPct);
+          return (
+            <div key={key} className={`flex items-center gap-1.5 px-4 ${ROW_H} ${i < 4 ? COL_BORDER : ""}`}>
+              <span className="text-[12px] font-semibold" style={{ fontFamily: "var(--font-mono, monospace)", color, letterSpacing: "-.01em" }}>{label}</span>
+              {label !== "—" && <span className="text-[10px] text-gray-400">YoY</span>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Bar */}
+      <div className="flex items-center px-4 h-[28px]">
+        <div className="flex w-full rounded overflow-hidden" style={{ height: "5px", gap: "2px" }}>
+          <div style={{ flex: barNew, background: "#7c3aed", opacity: 0.55, borderRadius: "3px 0 0 3px" }}/>
+          <div style={{ flex: barUp,  background: "#10b981", opacity: 0.55 }}/>
+          <div style={{ flex: barCs,  background: "#3b82f6", opacity: 0.55, borderRadius: "0 3px 3px 0" }}/>
         </div>
-      ))}
+      </div>
+
     </div>
   );
 };
@@ -486,9 +518,14 @@ const recapRate = (t) => t && t.total > 0 ? ((t.upsell + t.crosssell) / t.total)
 const GRID      = "250px 85px 85px 85px 85px 85px 85px 85px";
 const GAP       = { gap: "16px", justifyContent: "space-between" };
 
-const SortTh = ({ col, label, right = false, sortCol, onSort }) => (
-  <span className={"cursor-pointer select-none hover:text-gray-700 transition text-xs uppercase tracking-wider font-medium whitespace-nowrap " + (right ? "block text-right" : "")}
-    onClick={() => onSort(col)} style={{ color: sortCol === col ? "#1d4ed8" : "#9ca3af" }}>{label}</span>
+const SortTh = ({ col, label, right = false, sortCol, sortDir, onSort }) => (
+  <span className={"cursor-pointer select-none hover:text-gray-700 transition text-xs uppercase tracking-wider font-medium whitespace-nowrap inline-flex items-center gap-1 " + (right ? "justify-end w-full" : "")}
+    onClick={() => onSort(col)} style={{ color: sortCol === col ? "#1d4ed8" : "#9ca3af" }}>
+    {label}
+    {sortCol === col && (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={"flex-shrink-0 " + (sortDir === "asc" ? "rotate-180" : "")}><path d="M6 9l6 6 6-6"/></svg>
+    )}
+  </span>
 );
 
 const IDBadge  = ({ id })    => <span className="inline-block px-1.5 py-px text-[10px] font-medium rounded border border-gray-200 bg-gray-50 text-gray-400 flex-shrink-0">{id}</span>;
@@ -829,7 +866,7 @@ const callClaudeAPI = async (products) => {
 /* ═══════════════════════════════════════════════════════════════════
    TRACKER VIEW
    ═══════════════════════════════════════════════════════════════════ */
-const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
+const TrackerView = ({ allRows, sortedMonths, typeMap, csvCount }) => {
   const latestMonth = sortedMonths.length ? sortedMonths[sortedMonths.length - 1] : null;
   const [selMonths, setSelMonths]             = useState(() => latestMonth ? [latestMonth] : []);
   const [selPartner, setSelPartner]           = useState([]);
@@ -847,11 +884,11 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [aiFailed, setAIFailed]               = useState(false);
   const [sortCol, setSortCol]                 = useState(null);
   const [historyTarget, setHistoryTarget]     = useState(null);  // { cID, cNm, country }
-  const [leaderboardMode, setLeaderboardMode] = useState(false);
-  const [lbDimension, setLbDimension]         = useState("customer");
+  const [lbDimension, setLbDimension]         = useState(null);
+  const leaderboardMode                       = lbDimension !== null;
   const [lbSortCol, setLbSortCol]             = useState("total");
   const [lbSortDir, setLbSortDir]             = useState("desc");
-  const [displayMode, setDisplayMode]          = useState("$");
+  const [displayMode, setDisplayMode]         = useState("$");
 
   const historyData = useMemo(() => {
     if (!historyTarget) return null;
@@ -915,13 +952,16 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     if (latestMonth && latestMonth !== prevLatestRef.current) {
       prevLatestRef.current = latestMonth;
       setSelMonths([latestMonth]);
+      setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
+      setLbDimension(null);
+      setSortCol(null); setSortDir("desc");
+      setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0);
     }
   }, [latestMonth]);
 
-  const deferredMonths  = useDeferredValue(selMonths);
   const effectiveMonths = useMemo(
-    () => deferredMonths.length ? deferredMonths : (latestMonth ? [latestMonth] : []),
-    [deferredMonths, latestMonth]
+    () => selMonths.length ? selMonths : (latestMonth ? [latestMonth] : []),
+    [selMonths, latestMonth]
   );
 
   const priorYearMonths = useMemo(() => {
@@ -933,6 +973,14 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     allRows.filter(r => effectiveMonths.includes(r._reportingMonth)),
     [allRows, effectiveMonths]
   );
+
+  useEffect(() => {
+    if (monthRows.length === 0 && (selPartner.length || selCustomer.length || selProducts.length || selCountry.length)) {
+      setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
+      setSortCol(null); setSortDir("desc");
+      setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0);
+    }
+  }, [monthRows]);
 
   /* ── Cascading valid sets ── */
   const validSets = useMemo(() => {
@@ -965,13 +1013,33 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     return new Set(f.map(r => r._reportingMonth).filter(Boolean));
   }, [allRows, selPartner, selCustomer, selProducts, selCountry]);
 
-  /* never allow an empty month selection — revert to most recent VALID month */
+  const wouldBeEmpty = useCallback((partnerF, customerF, productsF, countryF, monthsF) => {
+    const monthSet   = new Set(monthsF);
+    const partnerSet = partnerF.length  ? new Set(partnerF)  : null;
+    const custSet    = customerF.length ? new Set(customerF) : null;
+    const prodSet    = productsF.length ? new Set(productsF) : null;
+    const countrySet = countryF.length  ? new Set(countryF)  : null;
+    return !allRows.some(r => {
+      if (!monthSet.has(r._reportingMonth))                               return false;
+      if (partnerSet && !partnerSet.has((r["Partner ID"]  || "").trim())) return false;
+      if (custSet    && !custSet.has((r["Customer ID"]    || "").trim())) return false;
+      if (prodSet    && !prodSet.has((r["Product"]        || "").trim())) return false;
+      if (countrySet && !countrySet.has((r["Country"]     || "").trim())) return false;
+      return true;
+    });
+  }, [allRows]);
+
+  /* never allow an empty month selection or a selection that yields no data */
   const handleMonthsChange = useCallback((next) => {
-    if (next.length) { setSelMonths(next); return; }
+    if (next.length) {
+      if (next.length < selMonths.length && wouldBeEmpty(selPartner, selCustomer, selProducts, selCountry, next)) return;
+      setSelMonths(next);
+      return;
+    }
     const validList = sortedMonths.filter(m => validForMonth.has(m));
     const fallback  = validForMonth.has(latestMonth) ? latestMonth : (validList[validList.length - 1] || latestMonth);
     setSelMonths(fallback ? [fallback] : []);
-  }, [sortedMonths, validForMonth, latestMonth]);
+  }, [sortedMonths, validForMonth, latestMonth, selMonths, selPartner, selCustomer, selProducts, selCountry, wouldBeEmpty]);
 
   /* ── Filter options ── */
   const partnerOptions = useMemo(() => {
@@ -1072,11 +1140,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     return m;
   }, [allRows]);
 
-  /* ── Leaderboard ── */
-  const LB_DIM_LABELS = { customer: "customers", country: "countries", partner: "partners", product: "products" };
-
+ /* ── Leaderboard ── */
   const lbData = useMemo(() => {
-    if (!leaderboardMode) return null;
+    if (!lbDimension) return null;
     const rows = allRows.filter(r => effectiveMonths.includes(r._reportingMonth));
     const byCustomer = {}, byCountry = {}, byPartner = {}, byProduct = {};
     const custIDs = new Set(), ctries = new Set(), partIDs = new Set(), prods = new Set();
@@ -1110,7 +1176,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
       byCustomer, byCountry, byPartner, byProduct,
       counts: { customer: custIDs.size, country: ctries.size, partner: partIDs.size, product: prods.size },
     };
-  }, [leaderboardMode, allRows, effectiveMonths, typeMap]);
+  }, [lbDimension, allRows, effectiveMonths, typeMap]);
 
   const lbRows = useMemo(() => {
     if (!lbData) return [];
@@ -1124,25 +1190,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     if (lbSortCol === col) { if (lbSortDir === "desc") setLbSortDir("asc"); else { setLbSortCol("total"); setLbSortDir("desc"); } }
     else { setLbSortCol(col); setLbSortDir("desc"); }
   }, [lbSortCol, lbSortDir]);
-
-  const lbSortLabel = { new: "New", upsell: "Upsell", crosssell: "Cross-sell", total: "Total", recap: "Recapture" }[lbSortCol] || "Total";
-
-  const resetLbFilters = useCallback(() => {
-    setSelMonths(latestMonth ? [latestMonth] : []);
-    setLbSortCol("total");
-    setLbSortDir("desc");
-  }, [latestMonth]);
-
-  const exitLeaderboard = useCallback(() => {
-    setLeaderboardMode(false);
-    setLbDimension("customer");
-    setLbSortCol("total");
-    setLbSortDir("desc");
-    setSelMonths(latestMonth ? [latestMonth] : []);
-    setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
-    setSortCol(null); setSortDir("desc");
-    setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0);
-  }, [latestMonth]);
 
   const displayVal = (val, rowTotal) => displayMode === "%" ? fmtPct(Math.abs(rowTotal) > 0 ? (val / Math.abs(rowTotal)) * 100 : 0) : fmtVal(val);
 
@@ -1177,69 +1224,92 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const totalPartnerPages  = Math.max(1, Math.ceil(customerNames.length / PAGE_SIZE));
   const safePartnerPage    = Math.min(partnerPage, totalPartnerPages - 1);
   const pagedCustomerNames = customerNames.slice(safePartnerPage * PAGE_SIZE, (safePartnerPage + 1) * PAGE_SIZE);
-  const uniquePartnerCount = useMemo(() => { const s = new Set(); Object.values(currentCustomers).forEach(cd => Object.values(cd.countries).forEach(ctd => Object.keys(ctd.partners).forEach(pID => s.add(pID)))); return s.size; }, [currentCustomers]);
-
-  const hasFilters = (selMonths.length !== 1 || selMonths[0] !== latestMonth) || selPartner.length > 0 || selCustomer.length > 0 || selProducts.length > 0 || selCountry.length > 0 || sortCol !== null;
+  const hasFilters = (selMonths.length !== 1 || selMonths[0] !== latestMonth) || selPartner.length > 0 || selCustomer.length > 0 || selProducts.length > 0 || selCountry.length > 0 || sortCol !== null || lbDimension !== null;
 
   const resetAll = useCallback(() => {
     setSelMonths(latestMonth ? [latestMonth] : []); setSelPartner([]); setSelCustomer([]); setSelProducts([]); setSelCountry([]);
+    setLbDimension(null);
     setSortCol(null); setSortDir("desc");
     setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0);
   }, [latestMonth]);
 
+  const metaRow = (
+    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <div className="flex items-center gap-3 text-xs text-gray-500">
+        <span>{csvCount.toLocaleString()} CSV{csvCount !== 1 ? "s" : ""} uploaded</span>
+        <span className="text-gray-300 text-xs select-none">|</span>
+        <span>{allRows.length.toLocaleString()} rows imported</span>
+      </div>
+      <div className="flex items-center gap-2 text-xs text-gray-400 select-none">
+        <button onClick={() => setDisplayMode("$")}
+          className={"transition " + (displayMode === "$" ? "text-gray-700 font-medium" : "hover:text-gray-600")}>
+          $
+        </button>
+        <span>/</span>
+        <button onClick={() => setDisplayMode("%")}
+          className={"transition " + (displayMode === "%" ? "text-gray-700 font-medium" : "hover:text-gray-600")}>
+          %
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div>
-      <KPICards totals={currentTotals} priorTotals={priorTotals} displayMode={displayMode}/>
+      <KPICards totals={currentTotals} priorTotals={priorTotals}/>
 
       {/* Filter bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2">
           <FYMonthFilter values={selMonths} onChange={handleMonthsChange} allMonths={sortedMonths} validMonths={leaderboardMode ? undefined : validForMonth}/>
-          {leaderboardMode
-            ? [["customer","Customer"],["country","Country"],["partner","Partner"],["product","Product"]].map(([key, label]) => (
-                <button key={key} onClick={() => setLbDimension(key)}
-                  className={"flex-1 min-w-0 h-[36px] px-2 text-xs font-medium rounded-lg border transition " + (lbDimension === key ? "bg-blue-50 text-blue-600 border-blue-400" : "text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50")}>
-                  {label}
-                </button>
-              ))
-            : <>
-                <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }} options={customerOptions} placeholder="Customer" searchable/></div>
-                <div className="flex-1 min-w-0"><MultiSel values={selCountry}  onChange={setSelCountry}                                 options={countryOptions}  placeholder="Country"/></div>
-                <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v); setPartnerPage(0); }}  options={partnerOptions}  placeholder="Partner"  searchable/></div>
-                <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts}                                 options={productOptions}  placeholder="Product"  searchable/></div>
-              </>
-          }
-          {leaderboardMode
-            ? <button onClick={resetLbFilters} className="h-[36px] px-3 text-xs font-medium rounded-lg border flex-shrink-0 whitespace-nowrap text-red-500 border-red-200 hover:bg-red-50 transition">Reset</button>
-            : <button onClick={resetAll} disabled={!hasFilters} className={"h-[36px] px-3 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>Reset</button>
-          }
-          <div className="flex border border-gray-200 rounded-lg overflow-hidden flex-shrink-0 h-[36px]">
-            <button onClick={() => { if (leaderboardMode) exitLeaderboard(); }} className={"px-3 text-xs font-medium h-full transition " + (!leaderboardMode ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:bg-gray-50")}>Raw Data</button>
-            <button onClick={() => { if (!leaderboardMode) setLeaderboardMode(true); }} className={"px-3 text-xs font-medium border-l border-gray-200 h-full transition " + (leaderboardMode ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:bg-gray-50")}>Leaderboard</button>
+          <div className="flex-1 min-w-0">
+            <MultiSel
+              values={selCustomer} options={customerOptions} placeholder="Customer" searchable
+              onChange={v => { if (v.length < selCustomer.length && wouldBeEmpty(selPartner, v, selProducts, selCountry, effectiveMonths)) return; setSelCustomer(v); setPartnerPage(0); }}
+              leaderboardLabel="Top customers" leaderboardActive={lbDimension === "customer"} disabled={leaderboardMode && lbDimension !== "customer"}
+              onLeaderboardToggle={() => { if (lbDimension === "customer") { setLbDimension(null); } else { setLbDimension("customer"); setSelCustomer([]); setSelPartner([]); setSelProducts([]); setSelCountry([]); setPartnerPage(0); } }}
+            />
           </div>
-          <div className="flex border border-gray-200 rounded-lg overflow-hidden flex-shrink-0 h-[36px]">
-            <button onClick={() => setDisplayMode("$")} className={"px-3 text-xs font-medium h-full transition " + (displayMode === "$" ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:bg-gray-50")}>$</button>
-            <button onClick={() => setDisplayMode("%")} className={"px-3 text-xs font-medium border-l border-gray-200 h-full transition " + (displayMode === "%" ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:bg-gray-50")}>%</button>
+          <div className="flex-1 min-w-0">
+            <MultiSel
+              values={selCountry} options={countryOptions} placeholder="Country"
+              onChange={v => { if (v.length < selCountry.length && wouldBeEmpty(selPartner, selCustomer, selProducts, v, effectiveMonths)) return; setSelCountry(v); }}
+              leaderboardLabel="Top countries" leaderboardActive={lbDimension === "country"} disabled={leaderboardMode && lbDimension !== "country"}
+              onLeaderboardToggle={() => { if (lbDimension === "country") { setLbDimension(null); } else { setLbDimension("country"); setSelCustomer([]); setSelPartner([]); setSelProducts([]); setSelCountry([]); setPartnerPage(0); } }}
+            />
           </div>
+          <div className="flex-1 min-w-0">
+            <MultiSel
+              values={selPartner} options={partnerOptions} placeholder="Partner" searchable
+              onChange={v => { if (v.length < selPartner.length && wouldBeEmpty(v, selCustomer, selProducts, selCountry, effectiveMonths)) return; setSelPartner(v); setPartnerPage(0); }}
+              leaderboardLabel="Top partners" leaderboardActive={lbDimension === "partner"} disabled={leaderboardMode && lbDimension !== "partner"}
+              onLeaderboardToggle={() => { if (lbDimension === "partner") { setLbDimension(null); } else { setLbDimension("partner"); setSelCustomer([]); setSelPartner([]); setSelProducts([]); setSelCountry([]); setPartnerPage(0); } }}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <MultiSel
+              values={selProducts} options={productOptions} placeholder="Product" searchable
+              onChange={v => { if (v.length < selProducts.length && wouldBeEmpty(selPartner, selCustomer, v, selCountry, effectiveMonths)) return; setSelProducts(v); }}
+              leaderboardLabel="Top products" leaderboardActive={lbDimension === "product"} disabled={leaderboardMode && lbDimension !== "product"}
+              onLeaderboardToggle={() => { if (lbDimension === "product") { setLbDimension(null); } else { setLbDimension("product"); setSelCustomer([]); setSelPartner([]); setSelProducts([]); setSelCountry([]); setPartnerPage(0); } }}
+            />
+          </div>
+          <button onClick={resetAll} disabled={!hasFilters} className={"h-[36px] px-3 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>Reset filters</button>
         </div>
       </div>
 
       {/* Table */}
       {leaderboardMode ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {/* Meta row */}
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-xs text-gray-500">{lbDimension === "country" ? "All countries" : `Top 10 ${LB_DIM_LABELS[lbDimension]}`}</span>
-            <span className="text-[10px] font-medium tracking-wider uppercase text-gray-400">Sorted by {lbSortLabel}</span>
-          </div>
+          {metaRow}
           {/* Column headers */}
           <div className="grid items-center px-4 py-2.5 bg-gray-50 border-b border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
             <span/><span/><span/>
-            <SortTh col="new"       label="New"        sortCol={lbSortCol} onSort={toggleLbSort} right/>
-            <SortTh col="upsell"    label="Upsell"     sortCol={lbSortCol} onSort={toggleLbSort} right/>
-            <SortTh col="crosssell" label="Cross-sell" sortCol={lbSortCol} onSort={toggleLbSort} right/>
-            <SortTh col="total"     label="Total"      sortCol={lbSortCol} onSort={toggleLbSort} right/>
-            <SortTh col="recap"     label="Recapture"  sortCol={lbSortCol} onSort={toggleLbSort} right/>
+            <SortTh col="new"       label="New"        sortCol={lbSortCol} sortDir={lbSortDir} onSort={toggleLbSort} right/>
+            <SortTh col="upsell"    label="Upsell"     sortCol={lbSortCol} sortDir={lbSortDir} onSort={toggleLbSort} right/>
+            <SortTh col="crosssell" label="Cross-sell" sortCol={lbSortCol} sortDir={lbSortDir} onSort={toggleLbSort} right/>
+            <SortTh col="total"     label="Total"      sortCol={lbSortCol} sortDir={lbSortDir} onSort={toggleLbSort} right/>
+            <SortTh col="recap"     label="Recapture"  sortCol={lbSortCol} sortDir={lbSortDir} onSort={toggleLbSort} right/>
           </div>
           {/* Rows */}
           {lbRows.map((row, i) => {
@@ -1250,12 +1320,6 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
               <div key={row.id || row.name} className={i > 0 ? "border-t border-gray-200" : ""}>
                 <div className="grid items-center px-4 py-3" style={{gridTemplateColumns: GRID, ...GAP}}>
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <div className={"w-[18px] h-[18px] rounded flex items-center justify-center flex-shrink-0 " + (lbDimension === "customer" ? "bg-emerald-50" : lbDimension === "country" ? "bg-orange-50" : lbDimension === "partner" ? "bg-blue-50" : "bg-violet-50")}>
-                      {lbDimension === "customer" && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>}
-                      {lbDimension === "country"  && <svg width="9"  height="9"  viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>}
-                      {lbDimension === "partner"  && <svg width="9"  height="9"  viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V11h6v10"/></svg>}
-                      {lbDimension === "product"  && <svg width="9"  height="9"  viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>}
-                    </div>
                     <span className="text-xs font-medium text-gray-800 truncate" title={row.name}>{row.name}</span>
                     {showId && row.id && <IDBadge id={row.id}/>}
                   </div>
@@ -1281,51 +1345,18 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
           </div>
         : <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
 
-            {/* Meta row */}
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-3 text-xs text-gray-500">
-                <span>{allRows.length.toLocaleString()} rows imported</span>
-                <span className="text-gray-300 text-sm select-none">|</span>
-                <span>{customerNames.length.toLocaleString()} unique customer{customerNames.length !== 1 ? "s" : ""}</span>
-                <span className="text-gray-300 text-sm select-none">|</span>
-                <span>{uniquePartnerCount.toLocaleString()} unique partner{uniquePartnerCount !== 1 ? "s" : ""}</span>
-              </div>
-              {totalPartnerPages > 1 && (
-                <div className="flex items-center">
-                  {[
-                    ["First", () => setPartnerPage(0),                                            safePartnerPage === 0],
-                    null,
-                    ["Back",  () => setPartnerPage(p => Math.max(0, p - 1)),                      safePartnerPage === 0],
-                    null,
-                    [`${safePartnerPage + 1} / ${totalPartnerPages}`, null, false],
-                    null,
-                    ["Next",  () => setPartnerPage(p => Math.min(totalPartnerPages - 1, p + 1)), safePartnerPage >= totalPartnerPages - 1],
-                    null,
-                    ["Last",  () => setPartnerPage(totalPartnerPages - 1),                        safePartnerPage >= totalPartnerPages - 1],
-                  ].map((item, i) =>
-                    item === null
-                      ? <span key={i} className="text-gray-300 mx-1">·</span>
-                      : item[1]
-                        ? <button key={i} onClick={() => { item[1](); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); }} disabled={item[2]}
-                            className={"px-2 py-1 text-xs font-medium transition " + (item[2] ? "text-gray-300 cursor-not-allowed" : "text-gray-500 hover:text-gray-700")}>
-                            {item[0]}
-                          </button>
-                        : <span key={i} className="px-2 py-1 text-xs font-medium text-gray-500">{item[0]}</span>
-                  )}
-                </div>
-              )}
-            </div>
+            {metaRow}
 
             {/* Column headers */}
             <div className="grid items-center px-4 py-2.5 bg-gray-50 border-b border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
               <span></span>
               <span/>
               <span/>
-              <SortTh col="new"       label="New"        sortCol={sortCol} onSort={toggleSort} right/>
-              <SortTh col="upsell"    label="Upsell"     sortCol={sortCol} onSort={toggleSort} right/>
-              <SortTh col="crosssell" label="Cross-sell" sortCol={sortCol} onSort={toggleSort} right/>
-              <SortTh col="total"     label="Total"      sortCol={sortCol} onSort={toggleSort} right/>
-              <SortTh col="recap"     label="Recapture"  sortCol={sortCol} onSort={toggleSort} right/>
+              <SortTh col="new"       label="New"        sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} right/>
+              <SortTh col="upsell"    label="Upsell"     sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} right/>
+              <SortTh col="crosssell" label="Cross-sell" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} right/>
+              <SortTh col="total"     label="Total"      sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} right/>
+              <SortTh col="recap"     label="Recapture"  sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} right/>
             </div>
 
             {/* Customer rows */}
@@ -1450,6 +1481,30 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                 </div>
               );
             })}
+            {totalPartnerPages > 1 && (
+              <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-end">
+                {[
+                  ["First", () => setPartnerPage(0),                                            safePartnerPage === 0],
+                  null,
+                  ["Back",  () => setPartnerPage(p => Math.max(0, p - 1)),                      safePartnerPage === 0],
+                  null,
+                  [`${safePartnerPage + 1} / ${totalPartnerPages}`, null, false],
+                  null,
+                  ["Next",  () => setPartnerPage(p => Math.min(totalPartnerPages - 1, p + 1)), safePartnerPage >= totalPartnerPages - 1],
+                  null,
+                  ["Last",  () => setPartnerPage(totalPartnerPages - 1),                        safePartnerPage >= totalPartnerPages - 1],
+                ].map((item, i) =>
+                  item === null
+                    ? <span key={i} className="text-gray-300 mx-1">·</span>
+                    : item[1]
+                      ? <button key={i} onClick={() => { item[1](); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); }} disabled={item[2]}
+                          className={"px-2 py-1 text-xs font-medium transition " + (item[2] ? "text-gray-300 cursor-not-allowed" : "text-gray-500 hover:text-gray-700")}>
+                          {item[0]}
+                        </button>
+                      : <span key={i} className="px-2 py-1 text-xs font-medium text-gray-500">{item[0]}</span>
+                )}
+              </div>
+            )}
           </div>
       }
       <HistoryModal
@@ -1510,6 +1565,7 @@ class ErrorBoundary extends React.Component {
    ═══════════════════════════════════════════════════════════════════ */
 function App() {
   const [allRows, setAllRows]                 = useState([]);
+  const [csvCount, setCsvCount]               = useState(0);
   const [dataLoaded, setDataLoaded]           = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadState, setUploadState]         = useState(null);
@@ -1530,6 +1586,7 @@ function App() {
         const idx    = await psGet("rows_idx") || [];
         const chunks = await Promise.all(idx.map(k => psGet("rows:" + k)));
         setAllRows(chunks.flat().filter(Boolean));
+        setCsvCount(await psGet("csv_count") || 0);
       } catch { setAllRows([]); }
       setDataLoaded(true);
     })();
@@ -1648,6 +1705,7 @@ function App() {
       setAllRows(prev => [...prev.filter(r => !batchMonths.includes(r._reportingMonth)), ...batchRows]);
 
       console.log("[CloudRe] Upload complete —", batchRows.length, "rows ·", batchMonths.length, "month(s) ·", fileList.length, "file(s)");
+      setCsvCount(prev => { const next = prev + fileList.length; psSet("csv_count", next); return next; });
       setUploadState({ status: "success", imported: batchRows.length, skipped: totalSkipped });
 
     } catch (err) {
@@ -1658,7 +1716,7 @@ function App() {
 
   /* ── Clear all ── */
   const clearAll = useCallback(async () => {
-    setAllRows([]); setUploadState(null);
+    setAllRows([]); setUploadState(null); setCsvCount(0);
     try {
       const db = await getIDB();
       const tx = db.transaction("kv", "readwrite");
@@ -1723,7 +1781,7 @@ function App() {
 
       {/* ── Content ── */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {hasData && <TrackerView allRows={allRows} sortedMonths={sortedMonths} typeMap={typeMap}/>}
+        {hasData && <TrackerView allRows={allRows} sortedMonths={sortedMonths} typeMap={typeMap} csvCount={csvCount}/>}
       </div>
 
       {uploadModalOpen && (
