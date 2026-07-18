@@ -315,17 +315,18 @@ const ChangeChip = ({ curr, prior, isPct = false }) => {
   );
 };
 
-const KPICards = ({ totals, priorTotals }) => {
+const KPICards = ({ totals, priorTotals, displayMode }) => {
   const total = Math.max(totals.total, 1);
   const currRate  = recapRate(totals);
   const priorRate = priorTotals ? recapRate(priorTotals) : null;
+  const pctVal    = (v) => fmtPct(total > 0 ? (v / total) * 100 : 0);
 
   const dynamic = {
-    upsell:    { pct: Math.round((totals.upsell    / total) * 100), val: fmtVal(totals.upsell),    curr: totals.upsell,    prior: priorTotals?.upsell    ?? null, isPct: false },
-    crosssell: { pct: Math.round((totals.crosssell / total) * 100), val: fmtVal(totals.crosssell), curr: totals.crosssell, prior: priorTotals?.crosssell ?? null, isPct: false },
-    new:       { pct: Math.round((totals.new       / total) * 100), val: fmtVal(totals.new),       curr: totals.new,       prior: priorTotals?.new       ?? null, isPct: false },
-    recapture: { pct: null,                     val: fmtPct(currRate),         curr: currRate,         prior: priorRate,                      isPct: true  },
-    total:     { pct: null,                     val: fmtVal(totals.total),     curr: totals.total,     prior: priorTotals?.total     ?? null, isPct: false },
+    upsell:    { pct: Math.round((totals.upsell    / total) * 100), val: displayMode === "%" ? pctVal(totals.upsell)    : fmtVal(totals.upsell),    curr: totals.upsell,    prior: priorTotals?.upsell    ?? null, isPct: false },
+    crosssell: { pct: Math.round((totals.crosssell / total) * 100), val: displayMode === "%" ? pctVal(totals.crosssell) : fmtVal(totals.crosssell), curr: totals.crosssell, prior: priorTotals?.crosssell ?? null, isPct: false },
+    new:       { pct: Math.round((totals.new       / total) * 100), val: displayMode === "%" ? pctVal(totals.new)       : fmtVal(totals.new),       curr: totals.new,       prior: priorTotals?.new       ?? null, isPct: false },
+    recapture: { pct: null,                     val: fmtPct(currRate),                                                     curr: currRate,             prior: priorRate,                                      isPct: true  },
+    total:     { pct: null,                     val: displayMode === "%" ? "100.0%"                 : fmtVal(totals.total), curr: totals.total,         prior: priorTotals?.total     ?? null, isPct: false },
   };
   const CARDS = KPI_CONFIG.map(cfg => ({ ...cfg, ...dynamic[cfg.key] }));
 
@@ -340,7 +341,7 @@ const KPICards = ({ totals, priorTotals }) => {
               </div>
               <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{label}</span>
             </div>
-            {pill && pct != null && (
+            {pill && pct != null && displayMode !== "%" && (
               <span className="text-[10px] font-medium px-1.5 py-px rounded-full border flex-shrink-0 ml-1" style={{ background: pill.bg, color: pill.text, borderColor: pill.border }}>{pct}%</span>
             )}
           </div>
@@ -850,6 +851,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
   const [lbDimension, setLbDimension]         = useState("customer");
   const [lbSortCol, setLbSortCol]             = useState("total");
   const [lbSortDir, setLbSortDir]             = useState("desc");
+  const [displayMode, setDisplayMode]          = useState("$");
 
   const historyData = useMemo(() => {
     if (!historyTarget) return null;
@@ -1142,6 +1144,8 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
     setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); setPartnerPage(0);
   }, [latestMonth]);
 
+  const displayVal = (val, rowTotal) => displayMode === "%" ? fmtPct(Math.abs(rowTotal) > 0 ? (val / Math.abs(rowTotal)) * 100 : 0) : fmtVal(val);
+
   const toggleSort = useCallback((col) => {
     if (sortCol === col) { if (sortDir === "desc") setSortDir("asc"); else { setSortCol(null); setSortDir("desc"); } }
     else { setSortCol(col); setSortDir("desc"); }
@@ -1185,40 +1189,38 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
 
   return (
     <div>
-      <KPICards totals={currentTotals} priorTotals={priorTotals}/>
+      <KPICards totals={currentTotals} priorTotals={priorTotals} displayMode={displayMode}/>
 
       {/* Filter bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-2">
-          <FYMonthFilter values={selMonths} onChange={handleMonthsChange} allMonths={sortedMonths} validMonths={leaderboardMode ? undefined : validForMonth} />
-          {leaderboardMode ? (
-            <>
-              {[["customer","Customers"],["country","Countries"],["partner","Partners"],["product","Products"]].map(([key, label]) => (
+          <FYMonthFilter values={selMonths} onChange={handleMonthsChange} allMonths={sortedMonths} validMonths={leaderboardMode ? undefined : validForMonth}/>
+          {leaderboardMode
+            ? [["customer","Customer"],["country","Country"],["partner","Partner"],["product","Product"]].map(([key, label]) => (
                 <button key={key} onClick={() => setLbDimension(key)}
-                  className={"h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 " + (lbDimension === key ? "bg-blue-50 text-blue-600 border-blue-400" : "text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50")}>
+                  className={"flex-1 min-w-0 h-[36px] px-2 text-xs font-medium rounded-lg border transition " + (lbDimension === key ? "bg-blue-50 text-blue-600 border-blue-400" : "text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50")}>
                   {label}
                 </button>
-              ))}
-              <button onClick={resetLbFilters} className="h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap text-red-500 border-red-200 hover:bg-red-50">
-                Reset Filters
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }}              options={customerOptions} placeholder="Customer" searchable/></div>
-              <div className="flex-1 min-w-0"><MultiSel values={selCountry}  onChange={setSelCountry}                                               options={countryOptions}  placeholder="Country"/></div>
-              <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v);  setPartnerPage(0); }}              options={partnerOptions}  placeholder="Partner"  searchable/></div>
-              <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts}                                              options={productOptions}  placeholder="Product" searchable/></div>
-              <button onClick={resetAll} disabled={!hasFilters}
-                className={"h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>
-                Reset All Filters
-              </button>
-            </>
-          )}
-          <button onClick={() => { leaderboardMode ? exitLeaderboard() : setLeaderboardMode(true); }}
-            className={"h-[36px] px-4 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (leaderboardMode ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700" : "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100")}>
-            See Leaderboard
-          </button>
+              ))
+            : <>
+                <div className="flex-1 min-w-0"><MultiSel values={selCustomer} onChange={v => { setSelCustomer(v); setPartnerPage(0); }} options={customerOptions} placeholder="Customer" searchable/></div>
+                <div className="flex-1 min-w-0"><MultiSel values={selCountry}  onChange={setSelCountry}                                 options={countryOptions}  placeholder="Country"/></div>
+                <div className="flex-1 min-w-0"><MultiSel values={selPartner}  onChange={v => { setSelPartner(v); setPartnerPage(0); }}  options={partnerOptions}  placeholder="Partner"  searchable/></div>
+                <div className="flex-1 min-w-0"><MultiSel values={selProducts} onChange={setSelProducts}                                 options={productOptions}  placeholder="Product"  searchable/></div>
+              </>
+          }
+          {leaderboardMode
+            ? <button onClick={resetLbFilters} className="h-[36px] px-3 text-xs font-medium rounded-lg border flex-shrink-0 whitespace-nowrap text-red-500 border-red-200 hover:bg-red-50 transition">Reset</button>
+            : <button onClick={resetAll} disabled={!hasFilters} className={"h-[36px] px-3 text-xs font-medium rounded-lg border transition flex-shrink-0 whitespace-nowrap " + (hasFilters ? "text-red-500 border-red-200 hover:bg-red-50" : "text-gray-300 border-gray-200 cursor-not-allowed")}>Reset</button>
+          }
+          <div className="flex border border-gray-200 rounded-lg overflow-hidden flex-shrink-0 h-[36px]">
+            <button onClick={() => { if (leaderboardMode) exitLeaderboard(); }} className={"px-3 text-xs font-medium h-full transition " + (!leaderboardMode ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:bg-gray-50")}>Raw Data</button>
+            <button onClick={() => { if (!leaderboardMode) setLeaderboardMode(true); }} className={"px-3 text-xs font-medium border-l border-gray-200 h-full transition " + (leaderboardMode ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:bg-gray-50")}>Leaderboard</button>
+          </div>
+          <div className="flex border border-gray-200 rounded-lg overflow-hidden flex-shrink-0 h-[36px]">
+            <button onClick={() => setDisplayMode("$")} className={"px-3 text-xs font-medium h-full transition " + (displayMode === "$" ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:bg-gray-50")}>$</button>
+            <button onClick={() => setDisplayMode("%")} className={"px-3 text-xs font-medium border-l border-gray-200 h-full transition " + (displayMode === "%" ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:bg-gray-50")}>%</button>
+          </div>
         </div>
       </div>
 
@@ -1227,15 +1229,8 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {/* Meta row */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
-              <span>
-                {lbDimension === "country" ? `All ${lbData?.counts.country ?? 0} countries` : `Top 10 ${LB_DIM_LABELS[lbDimension]}`}
-                {lbDimension !== "country" && lbData && ` · ${lbData.counts[lbDimension].toLocaleString()} total`}
-                {` · ${selMonths.length === 1 ? fmtMonthKey(selMonths[0]) : `${selMonths.length} months`}`}
-              </span>
-            </div>
-            <span className="text-xs text-gray-400">Sorted by <span className="font-medium text-gray-600">{lbSortLabel}</span></span>
+            <span className="text-xs text-gray-500">{lbDimension === "country" ? "All countries" : `Top 10 ${LB_DIM_LABELS[lbDimension]}`}</span>
+            <span className="text-[10px] font-medium tracking-wider uppercase text-gray-400">Sorted by {lbSortLabel}</span>
           </div>
           {/* Column headers */}
           <div className="grid items-center px-4 py-2.5 bg-gray-50 border-b border-gray-200" style={{gridTemplateColumns: GRID, ...GAP}}>
@@ -1270,10 +1265,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                   <div className="flex items-center justify-end">
                     <span className="inline-block px-1.5 py-px text-[10px] rounded border border-gray-200 bg-gray-50 text-gray-400 flex-shrink-0 whitespace-nowrap">of {outOf}</span>
                   </div>
-                  <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(row.new)}</span>
-                  <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(row.upsell)}</span>
-                  <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(row.crosssell)}</span>
-                  <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(row.total)}</span>
+                  <span className="text-xs font-medium text-gray-900 text-right">{displayVal(row.new, row.total)}</span>
+                  <span className="text-xs font-medium text-gray-900 text-right">{displayVal(row.upsell, row.total)}</span>
+                  <span className="text-xs font-medium text-gray-900 text-right">{displayVal(row.crosssell, row.total)}</span>
+                  <span className="text-xs font-medium text-gray-900 text-right">{displayMode === "%" ? "100.0%" : fmtVal(row.total)}</span>
                   <span className="text-xs font-medium text-gray-900 text-right">{fmtPct(rate)}</span>
                 </div>
               </div>
@@ -1353,10 +1348,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                     </div>
                     <div className="flex items-center justify-end"><CntBadge label={`${countryKeys.length} countr${countryKeys.length !== 1 ? "ies" : "y"}`}/></div>
                     <div className="flex items-center justify-end"><IDBadge id={cID}/></div>
-                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.new)}</span>
-                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.upsell)}</span>
-                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.crosssell)}</span>
-                    <span className="text-xs font-medium text-gray-900 text-right">{fmtVal(cd.total)}</span>
+                    <span className="text-xs font-medium text-gray-900 text-right">{displayVal(cd.new, cd.total)}</span>
+                    <span className="text-xs font-medium text-gray-900 text-right">{displayVal(cd.upsell, cd.total)}</span>
+                    <span className="text-xs font-medium text-gray-900 text-right">{displayVal(cd.crosssell, cd.total)}</span>
+                    <span className="text-xs font-medium text-gray-900 text-right">{displayMode === "%" ? "100.0%" : fmtVal(cd.total)}</span>
                     <span className="text-xs font-medium text-gray-900 text-right">{fmtPct(rate)}</span>
                   </div>
 
@@ -1388,10 +1383,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                               View History
                             </button>
                           </div>
-                          <span className="text-xs text-gray-700 text-right">{ctd.new       !== 0 ? fmtVal(ctd.new)       : <Dash/>}</span>
-                          <span className="text-xs text-gray-700 text-right">{ctd.upsell    !== 0 ? fmtVal(ctd.upsell)    : <Dash/>}</span>
-                          <span className="text-xs text-gray-700 text-right">{ctd.crosssell !== 0 ? fmtVal(ctd.crosssell) : <Dash/>}</span>
-                          <span className="text-xs text-gray-700 text-right">{fmtVal(ctd.total)}</span>
+                          <span className="text-xs text-gray-700 text-right">{ctd.new       !== 0 ? displayVal(ctd.new, ctd.total)       : <Dash/>}</span>
+                          <span className="text-xs text-gray-700 text-right">{ctd.upsell    !== 0 ? displayVal(ctd.upsell, ctd.total)    : <Dash/>}</span>
+                          <span className="text-xs text-gray-700 text-right">{ctd.crosssell !== 0 ? displayVal(ctd.crosssell, ctd.total) : <Dash/>}</span>
+                          <span className="text-xs text-gray-700 text-right">{displayMode === "%" ? "100.0%" : fmtVal(ctd.total)}</span>
                           <span className="text-xs text-gray-700 text-right">{fmtPct(ctRate)}</span>
                         </div>
 
@@ -1418,10 +1413,10 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                                 </div>
                                 <div className="flex items-center justify-end"><CntBadge label={`${prodKeys.length} product${prodKeys.length !== 1 ? "s" : ""}`}/></div>
                                 <div className="flex items-center justify-end"><IDBadge id={pID}/></div>
-                                <span className="text-xs text-gray-700 text-right">{pd.new       !== 0 ? fmtVal(pd.new)       : <Dash/>}</span>
-                                <span className="text-xs text-gray-700 text-right">{pd.upsell    !== 0 ? fmtVal(pd.upsell)    : <Dash/>}</span>
-                                <span className="text-xs text-gray-700 text-right">{pd.crosssell !== 0 ? fmtVal(pd.crosssell) : <Dash/>}</span>
-                                <span className="text-xs text-gray-700 text-right">{fmtVal(pd.total)}</span>
+                                <span className="text-xs text-gray-700 text-right">{pd.new       !== 0 ? displayVal(pd.new, pd.total)       : <Dash/>}</span>
+                                <span className="text-xs text-gray-700 text-right">{pd.upsell    !== 0 ? displayVal(pd.upsell, pd.total)    : <Dash/>}</span>
+                                <span className="text-xs text-gray-700 text-right">{pd.crosssell !== 0 ? displayVal(pd.crosssell, pd.total) : <Dash/>}</span>
+                                <span className="text-xs text-gray-700 text-right">{displayMode === "%" ? "100.0%" : fmtVal(pd.total)}</span>
                                 <span className="text-xs text-gray-700 text-right">{fmtPct(pRate)}</span>
                               </div>
 
@@ -1439,9 +1434,9 @@ const TrackerView = ({ allRows, sortedMonths, typeMap }) => {
                                     </div>
                                     <span/><span/>
                                     {["new","upsell","crosssell"].map(t => (
-                                      <span key={t} className="text-xs text-gray-600 text-right">{prd[t] !== 0 ? fmtVal(prd[t]) : <Dash/>}</span>
+                                      <span key={t} className="text-xs text-gray-600 text-right">{prd[t] !== 0 ? displayVal(prd[t], prd.total) : <Dash/>}</span>
                                     ))}
-                                    <span className="text-xs font-medium text-gray-700 text-right">{fmtVal(prd.total)}</span>
+                                    <span className="text-xs font-medium text-gray-700 text-right">{displayMode === "%" ? "100.0%" : fmtVal(prd.total)}</span>
                                     <span className="text-right"><Dash/></span>
                                   </div>
                                 );
