@@ -356,7 +356,7 @@ const KPICards = ({ totals, priorTotals }) => {
               <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">{label}</span>
             </div>
             {pill && pct != null && (
-              <span className="text-[10px] font-medium px-1.5 py-px rounded-full border flex-shrink-0" style={{ background: pill.bg, color: pill.text, borderColor: pill.border }}>{pct}%</span>
+              <span className="text-[10px] font-semibold font-mono px-1.5 py-px rounded-full border flex-shrink-0" style={{ background: pill.bg, color: pill.text, borderColor: pill.border }}>{pct}%</span>
             )}
           </div>
         ))}
@@ -365,8 +365,15 @@ const KPICards = ({ totals, priorTotals }) => {
       {/* Row 2 — Main values */}
       <div className="grid border-b border-dashed border-gray-200" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
         {COLS.map(({ key, accent, val }, i) => (
-          <div key={key} className={`flex items-center px-4 h-[52px] ${i < 4 ? COL_BORDER : ""}`} style={{ borderTop: `3px solid ${accent}` }}>
-            <span className="text-[26px] font-medium text-gray-900" style={{ letterSpacing: "-0.03em", lineHeight: 1 }}>{val}</span>
+          <div key={key} className={`flex items-center justify-between px-4 h-[52px] ${i < 4 ? COL_BORDER : ""}`} style={{ borderTop: `3px solid ${accent}` }}>
+            <span className="text-[26px] font-semibold text-gray-900 font-mono" style={{ letterSpacing: "-0.03em", lineHeight: 1 }}>{val}</span>
+            {key === "recapture" && (
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] text-gray-400 whitespace-nowrap leading-snug">Upsell + Cross-sell</span>
+                <div className="w-full h-px bg-gray-200 my-0.5"/>
+                <span className="text-[10px] text-gray-400 whitespace-nowrap leading-snug">Total</span>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -379,6 +386,7 @@ const KPICards = ({ totals, priorTotals }) => {
           return (
             <div key={key} className={`flex items-center gap-1.5 px-4 ${ROW_H} ${i < 4 ? COL_BORDER : ""}`}>
               <span className="text-[12px] font-semibold font-mono" style={{ color, letterSpacing: "-.01em" }}>{label}</span>
+              {label !== "—" && <span className="text-[10px] text-gray-400">YoY</span>}
             </div>
           );
         })}
@@ -1155,7 +1163,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap, csvCount }) => {
     return m;
   }, [allRows]);
 
- /* ── Leaderboard ── */
+  /* ── Leaderboard ── */
   const lbData = useMemo(() => {
     if (!lbDimension) return null;
     const rows = allRows.filter(r => effectiveMonths.includes(r._reportingMonth));
@@ -1510,7 +1518,7 @@ const TrackerView = ({ allRows, sortedMonths, typeMap, csvCount }) => {
                   ["Last",  () => setPartnerPage(totalPartnerPages - 1),                        safePartnerPage >= totalPartnerPages - 1],
                 ].map((item, i, arr) =>
                   item === null
-                    ? <span key={i} className="text-gray-300 mx-1">·</span>
+                    ? <span key={i} className="text-gray-300 mx-1 text-xs">·</span>
                     : item[1]
                       ? <button key={i} onClick={() => { item[1](); setExpandedCust(new Set()); setExpandedCountry(new Set()); setExpandedPartner(new Set()); }} disabled={item[2]}
                           className={(i === arr.length - 1 ? "pl-2 pr-0" : "px-2") + " text-xs font-medium transition " + (item[2] ? "text-gray-300 cursor-not-allowed" : "text-gray-500 hover:text-gray-700")}>
