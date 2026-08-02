@@ -318,8 +318,8 @@ const KPICards = ({ totals, priorTotals }) => {
     { key: "new",       label: "New",        accent: "#7c3aed", pill: { bg: "#f5f3ff", text: "#4c1d95", border: "#ddd6fe" }, pct: Math.round((totals.new       / total) * 100), val: fmtVal(totals.new),       curr: totals.new,       prior: priorTotals?.new       ?? null, isPct: false },
     { key: "upsell",    label: "Upsell",     accent: "#10b981", pill: { bg: "#f0fdf4", text: "#166534", border: "#bbf7d0" }, pct: Math.round((totals.upsell    / total) * 100), val: fmtVal(totals.upsell),    curr: totals.upsell,    prior: priorTotals?.upsell    ?? null, isPct: false },
     { key: "crosssell", label: "Cross-sell", accent: "#3b82f6", pill: { bg: "#eff6ff", text: "#1e40af", border: "#bfdbfe" }, pct: Math.round((totals.crosssell / total) * 100), val: fmtVal(totals.crosssell), curr: totals.crosssell, prior: priorTotals?.crosssell ?? null, isPct: false },
-    { key: "recapture", label: "Recapture",  accent: "#d97706", pill: null, pct: null, val: fmtPct(currRate),      curr: currRate,       prior: priorRate,                      isPct: true  },
     { key: "total",     label: "Total",      accent: "#6b7280", pill: null, pct: null, val: fmtVal(totals.total), curr: totals.total,   prior: priorTotals?.total     ?? null, isPct: false },
+    { key: "recapture", label: "Recapture",  accent: "#d97706", pill: null, pct: null, val: fmtPct(currRate),      curr: currRate,       prior: priorRate,                      isPct: true  },
   ];
 
   const yoyColor  = (curr, prior, isPct) => {
@@ -365,15 +365,8 @@ const KPICards = ({ totals, priorTotals }) => {
       {/* Row 2 — Main values */}
       <div className="grid border-b border-dashed border-gray-200" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
         {COLS.map(({ key, accent, val }, i) => (
-          <div key={key} className={`flex items-center justify-between px-4 h-[52px] ${i < 4 ? COL_BORDER : ""}`} style={{ borderTop: `3px solid ${accent}` }}>
+          <div key={key} className={`flex items-center px-4 h-[52px] ${i < 4 ? COL_BORDER : ""}`} style={{ borderTop: `3px solid ${accent}` }}>
             <span className="text-[26px] font-semibold text-gray-900 font-mono" style={{ letterSpacing: "-0.03em", lineHeight: 1 }}>{val}</span>
-            {key === "recapture" && (
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] text-gray-400 whitespace-nowrap leading-snug">Upsell + Cross-sell</span>
-                <div className="w-full h-px bg-gray-200 my-0.5"/>
-                <span className="text-[10px] text-gray-400 whitespace-nowrap leading-snug">Total</span>
-              </div>
-            )}
           </div>
         ))}
       </div>
